@@ -1,0 +1,173 @@
+---
+title: "Analyse des Séries Temporelles : Taux d'Emploi et de Chômage au Canada"
+subtitle: "Projet Académique "
+author: "Adjaratou Sarr"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    highlight: tango 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center", fig.width = 8, fig.height = 5)
+library(forecast)
+library(tseries)
+library(ggplot2)
+library(TTR)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(zoo)
+```
+
+# Introduction
+
+Ce projet présente une analyse approfondie des séries temporelles portant sur les indicateurs du marché du travail au Canada, spécifiquement le **taux d'emploi** et le **taux de chômage**, sur la période allant de janvier 2020 à décembre 2024. L'étude s'articule autour de la vérification de la stationnarité, de l'application de techniques de lissage et de la caractérisation statistique des processus sous-jacents.
+
+# Méthodologie et Données
+
+## Sources des données
+
+Les données utilisées proviennent de **Statistique Canada**. Elles consistent en des relevés mensuels exprimés en pourcentage (%). La période d'étude couvre 60 mois d'observations, capturant ainsi les dynamiques post-pandémiques du marché du travail canadien.
+
+## Chargement et Préparation
+
+```{r importation}
+# Chargement des données (Chemins mis à jour pour l'environnement d'exécution)
+donnees_emploi <- read.csv("taux_emploi.csv")
+donnees_chomage <- read.csv("taux_chomage.csv")
+
+# Conversion des dates
+donnees_emploi$Date <- as.Date(donnees_emploi$Periode)
+donnees_chomage$Date <- as.Date(donnees_chomage$Periode)
+
+# Création des objets de séries temporelles (ts)
+emploi_ts <- ts(donnees_emploi$Taux.d.emploi, start = c(2020, 1), frequency = 12)
+chomage_ts <- ts(donnees_chomage$Taux.de.chomage, start = c(2020, 1), frequency = 12)
+```
+
+### Statistiques Descriptives
+
+| Indicateur | Moyenne | Écart-type | Variance |
+|:---|:---:|:---:|:---:|
+| Taux d'Emploi | `r round(mean(emploi_ts), 2)`% | `r round(sd(emploi_ts), 2)` | `r round(var(emploi_ts), 2)` |
+| Taux de Chômage | `r round(mean(chomage_ts), 2)`% | `r round(sd(chomage_ts), 2)` | `r round(var(chomage_ts), 2)` |
+
+# Analyse Visuelle
+
+L'observation initiale des séries permet de formuler des hypothèses sur la présence de tendances structurelles et de cycles saisonniers.
+
+```{r visualisation, echo=FALSE}
+p1 <- autoplot(emploi_ts) + 
+  labs(title = "Évolution du Taux d'Emploi au Canada (2020-2024)", y = "Taux (%)", x = "Année") +
+  theme_minimal()
+
+p2 <- autoplot(chomage_ts) + 
+  labs(title = "Évolution du Taux de Chômage au Canada (2020-2024)", y = "Taux (%)", x = "Année") +
+  theme_minimal()
+
+gridExtra::grid.arrange(p1, p2, ncol = 1)
+```
+
+# Traitement par Filtrage et Lissage
+
+## Moyenne Mobile (MM12)
+
+Nous appliquons une moyenne mobile d'ordre 12 pour neutraliser la composante saisonnière mensuelle.
+
+```{r lissage_mm}
+ma_emploi <- ma(emploi_ts, order = 12)
+ma_chomage <- ma(chomage_ts, order = 12)
+
+# Calcul des résidus
+residus_mm_emploi <- na.omit(emploi_ts - ma_emploi)
+residus_mm_chomage <- na.omit(chomage_ts - ma_chomage)
+```
+
+## Lissage Exponentiel Simple
+
+Le lissage exponentiel permet de donner plus de poids aux observations récentes. Nous comparons deux paramètres de lissage ($\alpha = 0.2$ et $\alpha = 0.3$).
+
+```{r lissage_exp, echo=FALSE}
+ExpSmooth <- function(x, alpha) {
+  result <- numeric(length(x))
+  result[1] <- x[1]
+  for (i in 2:length(x)) {
+    result[i] <- alpha * x[i] + (1 - alpha) * result[i - 1]
+  }
+  return(result)
+}
+
+# Application pour l'emploi
+emploi_vec <- as.numeric(emploi_ts)
+df_lissage_e <- tibble(
+  Temps = as.Date(as.yearmon(time(emploi_ts))),
+  Original = emploi_vec,
+  Alpha_0.2 = ExpSmooth(emploi_vec, 0.2),
+  Alpha_0.3 = ExpSmooth(emploi_vec, 0.3)
+) %>% pivot_longer(cols = -Temps, names_to = "Série", values_to = "Valeur")
+
+ggplot(df_lissage_e, aes(x = Temps, y = Valeur, color = Série)) +
+  geom_line(size = 1) +
+  scale_color_manual(values = c("Original" = "grey70", "Alpha_0.2" = "firebrick", "Alpha_0.3" = "dodgerblue")) +
+  labs(title = "Lissage Exponentiel : Taux d'Emploi", y = "Taux (%)") +
+  theme_light()
+```
+
+# Analyse de la Stationnarité
+
+## Différenciation d'ordre 1
+
+Pour stabiliser la moyenne, nous appliquons une différenciation première ($\Delta y_t = y_t - y_{t-1}$).
+
+```{r differenciation}
+diff_emploi <- diff(emploi_ts)
+diff_chomage <- diff(chomage_ts)
+```
+
+## Tests Statistiques de Stationnarité
+
+Nous croisons les résultats du test **ADF** (H0: non-stationnaire) et du test **KPSS** (H0: stationnaire).
+
+```{r tests_stationnarite, echo=FALSE}
+# Emploi
+adf_e <- adf.test(diff_emploi)
+kpss_e <- kpss.test(diff_emploi)
+
+# Chômage
+adf_c <- adf.test(diff_chomage)
+kpss_c <- kpss.test(diff_chomage)
+```
+
+- **Taux d'Emploi (différencié)** : ADF p-value = `r round(adf_e$p.value, 3)` | KPSS p-value = `r round(kpss_e$p.value, 3)`
+- **Taux de Chômage (différencié)** : ADF p-value = `r round(adf_c$p.value, 3)` | KPSS p-value = `r round(kpss_c$p.value, 3)`
+
+*Interprétation : Les deux séries différenciées rejettent l'hypothèse de racine unitaire (ADF) et ne rejettent pas l'hypothèse de stationnarité (KPSS), confirmant leur caractère stationnaire.*
+
+# Analyse des Corrélations
+
+## Autocorrélation (ACF)
+
+L'examen des fonctions d'autocorrélation permet de détecter d'éventuels processus AR ou MA résiduels.
+
+```{r acf_plot, echo=FALSE}
+par(mfrow=c(1,2))
+acf(diff_emploi, main="ACF Emploi (Diff)")
+acf(diff_chomage, main="ACF Chômage (Diff)")
+```
+
+## Test de Bruit Blanc (Ljung-Box)
+
+```{r box_test}
+box_e <- Box.test(diff_emploi, lag = 12, type = "Ljung-Box")
+box_c <- Box.test(diff_chomage, lag = 12, type = "Ljung-Box")
+```
+
+Les p-valeurs (`r round(box_e$p.value, 3)` pour l'emploi et `r round(box_c$p.value, 3)` pour le chômage) indiquent que les résidus se comportent comme un **bruit blanc**, validant ainsi l'efficacité de la transformation.
+
+# Conclusion
+
+Cette analyse démontre que bien que les taux d'emploi et de chômage au Canada présentent des tendances et une saisonnalité marquées, l'application d'une différenciation d'ordre 1 suffit à stationnariser les séries. Les processus résultants sont statistiquement stables, ouvrant la voie à une modélisation prédictive de type ARIMA.
