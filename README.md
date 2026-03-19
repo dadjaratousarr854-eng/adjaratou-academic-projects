@@ -33,4 +33,4 @@ Bienvenue sur mon dépôt GitHub professionnel. Ce portfolio regroupe mes travau
 
 **Auteur** : Adjaratou Sarr  
 **Spécialisation** : Statistique & Analyse de Données  
-**Contact** : [Votre Email/LinkedIn ici]
+**Contact** : dadjaratousarr854@gmail.com
