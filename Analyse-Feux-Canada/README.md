@@ -17,12 +17,17 @@ L'étude vise à :
 ### Tendance Annuelle
 L'analyse montre une forte variabilité interannuelle des superficies brûlées, avec des pics historiques notables.
 
-![Tendance Annuelle](./images/tendance_annuelle.png)
+![Tendance Annuelle](./fig_total_annuel_1990_2023.png)
 
 ### Répartition par Cause
 La foudre demeure la cause principale des grandes superficies brûlées au Canada, malgré la fréquence élevée des feux d'origine humaine.
 
 ![Répartition par Cause](./fig_superficie_par_cause_1990_2023.png)
+
+### Corrélation
+La corrélation entre le nombre de feux et la superficie brûlée montre une relation positive significative.
+
+![Corrélation](./fig_correlation_feux_superficie.png)
 
 ## Méthodologie
 
