@@ -176,4 +176,4 @@ kable(tableau_nombre,
       align = c("l","r","r")) |>
   kable_styling(full_width = FALSE, bootstrap_options = c("striped","hover")) |>
   row_spec(0, bold = TRUE)
-
+```
