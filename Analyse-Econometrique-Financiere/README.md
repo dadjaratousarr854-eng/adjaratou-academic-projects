@@ -1,6 +1,6 @@
-# Travaux Pratiques en Modélisation Économétrique
+# Analyse Économétrique Financière
 
-Ce dossier contient les travaux pratiques (TP3) du cours d'Économétrie (ECO2547) pour la session d'Hiver 2024. Le projet se concentre sur l'application de méthodes économétriques pour l'analyse de données financières.
+Ce dossier présente une analyse économétrique de données financières, mettant en œuvre des modèles avancés pour l'étude des relations économiques et la prévision. Le projet se concentre sur l'application pratique de la théorie économétrique à des cas concrets.
 
 ## Objectifs du Projet
 
@@ -10,7 +10,7 @@ Ce dossier contient les travaux pratiques (TP3) du cours d'Économétrie (ECO254
 
 ## Contenu du Répertoire
 
-*   `Analyse_Econometrique_ECO2547_TP3.xlsx` : Le fichier Excel contenant les données et les analyses préliminaires des travaux pratiques.
+*   `Analyse_Econometrique.xlsx` : Le fichier Excel contenant les données et les analyses économétriques détaillées.
 
 ## Outils Utilisés
 

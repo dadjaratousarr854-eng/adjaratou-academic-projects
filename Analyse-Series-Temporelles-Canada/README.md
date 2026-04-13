@@ -1,6 +1,6 @@
 # Analyse des Séries Temporelles Appliquée au Marché du Travail Canadien
 
-Ce projet propose une étude approfondie de l'évolution des taux d'emploi et de chômage au Canada sur la période 2020-2024. L'objectif est de fournir une analyse statistique rigoureuse des indicateurs du marché du travail canadien, en se concentrant sur la stationnarité des séries temporelles et la caractérisation de leurs processus stochastiques sous-jacents.
+Ce projet propose une étude approfondie de l'évolution des taux d'emploi et de chômage au Canada sur la période 2020-2024. L'objectif est de fournir une analyse statistique rigoureuse des indicateurs du marché du travail canadien, en se concentrant sur la stationnarité des séries temporelles et la caractérisation de leurs processus stochastiques sous-jacents, afin de dégager des insights pertinents sur la dynamique du marché du travail.
 
 ## Objectifs de l'Étude
 
@@ -23,7 +23,7 @@ La méthodologie adoptée comprend les étapes suivantes :
 
 ## Résultats Clés
 
-L'analyse révèle que les données brutes d'emploi et de chômage présentent des tendances et une saisonnalité prononcées. Cependant, une différenciation d'ordre un permet de stationnariser efficacement ces séries, les rendant ainsi aptes à des modélisations prédictives ultérieures, telles que les modèles ARIMA.
+L'analyse révèle que les données brutes d'emploi et de chômage présentent des tendances et une saisonnalité prononcées. Cependant, une différenciation d'ordre un permet de stationnariser efficacement ces séries, les rendant ainsi aptes à des modélisations prédictives ultérieures, telles que les modèles ARIMA. Ces résultats sont cruciaux pour la compréhension des mécanismes sous-jacents et pour l'élaboration de prévisions fiables.
 
 ## Contenu du Répertoire
 

@@ -1,6 +1,6 @@
 # Évaluation Critique de l'Intelligence Artificielle en Mammographie
 
-Ce projet présente une reproduction et une évaluation critique de l'étude "Nationwide real-world implementation of AI for cancer detection in population-based mammography screening", publiée dans *Nature Medicine*.
+Ce projet présente une reproduction et une évaluation critique de l'étude "Nationwide real-world implementation of AI for cancer detection in population-based mammography screening", publiée dans *Nature Medicine*. L'objectif est d'analyser l'impact de l'intelligence artificielle dans le dépistage du cancer du sein et de valider les conclusions de l'étude originale.
 
 ## Objectifs de l'Étude
 1.  **Synthèse et Évaluation Méthodologique** : Analyser la méthodologie employée dans l'article original.
@@ -13,7 +13,7 @@ L'analyse repose sur l'utilisation de modèles de régression logistique pour é
 - **Modèle Ajusté** : Intégration de l'effet fixe du groupe de lecteurs (radiologues) pour réduire les facteurs de confusion.
 
 ## Résultats Principaux
-Notre reproduction a confirmé la tendance positive de l'IA sur la détection, bien que l'ampleur de l'effet soit plus modeste que dans l'étude originale. Une attention particulière a été portée à l'augmentation du taux de rappel, soulignant les compromis nécessaires lors de l'intégration de l'IA en milieu clinique.
+Notre reproduction a confirmé la tendance positive de l'IA sur la détection, bien que l'ampleur de l'effet soit plus modeste que dans l'étude originale. Une attention particulière a été portée à l'augmentation du taux de rappel, soulignant les compromis nécessaires lors de l'intégration de l'IA en milieu clinique. Ces résultats sont essentiels pour une implémentation éclairée des technologies d'IA dans le domaine médical.
 
 ## Contenu du Répertoire
 - `Analyse_IA_Mammographie.Rmd` : Script R Markdown complet pour la reproduction des analyses.

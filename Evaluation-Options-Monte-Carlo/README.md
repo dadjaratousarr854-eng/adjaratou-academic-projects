@@ -1,6 +1,6 @@
-# Tarification d'Options Européennes par Simulation de Monte Carlo
+# Évaluation d'Options Européennes par Simulation de Monte Carlo
 
-Ce projet est dédié à l'implémentation et à l'évaluation comparative de diverses techniques de simulation de Monte Carlo pour la tarification d'options européennes, dans le cadre du modèle de Black-Scholes. L'objectif principal est d'explorer et de comparer différentes méthodes de réduction de variance afin d'améliorer la précision et l'efficacité des estimations de prix.
+Ce projet est dédié à l'implémentation et à l'évaluation comparative de diverses techniques de simulation de Monte Carlo pour l'évaluation d'options européennes, dans le cadre du modèle de Black-Scholes. L'objectif principal est d'explorer et de comparer différentes méthodes de réduction de variance afin d'améliorer la précision et l'efficacité des estimations de prix.
 
 ## Objectifs de l'Étude
 
@@ -25,8 +25,8 @@ La méthodologie comprend les étapes suivantes :
 
 ## Contenu du Répertoire
 
-*   `Modelisation_Stochastique_MAT4372.pdf` : Rapport complet détaillant les fondements théoriques, la méthodologie et les résultats du projet.
-*   `Monte_Carlo_Option_Pricing_MAT4372.R` : Script R contenant l'implémentation du modèle de Black-Scholes, de la simulation de Monte Carlo de base et des différentes techniques de réduction de variance.
+*   `Rapport_Modelisation_Stochastique.pdf` : Rapport complet détaillant les fondements théoriques, la méthodologie et les résultats du projet.
+*   `Monte_Carlo_Option_Pricing.R` : Script R contenant l'implémentation du modèle de Black-Scholes, de la simulation de Monte Carlo de base et des différentes techniques de réduction de variance.
 
 ## Outils Logiciels
 
