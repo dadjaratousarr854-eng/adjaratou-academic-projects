@@ -20,7 +20,7 @@ L'analyse montre une forte variabilité interannuelle des superficies brûlées,
 ### Répartition par Cause
 La foudre demeure la cause principale des grandes superficies brûlées au Canada, malgré la fréquence élevée des feux d'origine humaine.
 
-![Répartition par Cause](./images/repartition_causes.png)
+![Répartition par Cause](./fig_superficie_par_cause_1990_2023.png)
 
 ## Méthodologie
 
