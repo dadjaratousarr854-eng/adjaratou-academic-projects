@@ -5,7 +5,7 @@ date: "2025-10-24"
 output: pdf_document
 ---
 # Code des tableaux, et des graphiques ainsi que des analyses statistiques.
-J'ai utilisée la plage horaire 1990-2023 pour concorder avec les années utilisées par nos journalistes.
+Ce document présente une analyse statistique approfondie des dynamiques des feux de forêt au Canada sur la période 1990-2023. L'objectif est d'identifier les tendances annuelles, de comprendre la répartition des superficies brûlées et du nombre de feux par cause, et d'explorer la corrélation entre ces deux métriques. Les données proviennent de sources officielles et couvrent la période spécifiée pour une analyse cohérente.
 
 ```{r}
 
@@ -31,7 +31,36 @@ theme_pub <- theme_minimal(base_size = 13) +
         plot.background = element_rect(fill="#F8F8F8", color=NA))
 
 
-# 1) LECTURE DES DONNÉES DEPUIS LES FICHIERS CSV
+# 1) LECTURE ET VÉRIFICATION DES DONNÉES DEPUIS LES FICHIERS CSV
+
+# Fonction pour lire un fichier CSV avec gestion d'erreurs
+read_csv_safe <- function(path, sep = ",", ...) {
+  if (!file.exists(path)) {
+    stop(paste("Le fichier n'existe pas :", path))
+  }
+  tryCatch({
+    read.csv(path, sep = sep, ...)
+  }, error = function(e) {
+    stop(paste("Erreur lors de la lecture du fichier", path, ":", e$message))
+  })
+}
+
+# Fichier des superficies brûlées (en hectares)
+path_superficies <- "Superficies En Hectares.csv"
+df_superficies <- read_csv_safe(path_superficies, sep = "\t", check.names = FALSE)
+
+# Fichier du nombre de feux
+path_nombre <- "Nombre De Feux.csv"
+df_nombre <- read_csv_safe(path_nombre, sep = "\t", check.names = FALSE)
+
+# Vérification rapide des données lues
+cat("\nDonnées de superficies lues avec succès. Premières lignes :\n")
+print(head(df_superficies))
+cat("\nDonnées du nombre de feux lues avec succès. Premières lignes :\n")
+print(head(df_nombre))
+
+
+# 2) NETTOYAGE ET TRANSFORMATION DES DONNÉES SUPERFICIES
 
 # Fichier des superficies brûlées (en hectares)
 path_superficies <- "Superficies En Hectares.csv"
@@ -160,6 +189,42 @@ pC <- ggplot(donnees_nombre_agg, aes(Year, Total_nombre, fill = Cause_Group)) +
 ggsave("fig_nombre_feux_par_cause_1990_2023.png", pC, width=9, height=4.8, dpi=400)
 
 print(pC)
+
+# Tableau du nombre de feux par cause
+
+
+# 6) ANALYSE DE CORRÉLATION ENTRE SUPERFICIE ET NOMBRE DE FEUX
+
+# Fusion des données de superficie et de nombre de feux par année
+df_correlation <- df_total_9023 |>
+  left_join(df_nombre_propre |>
+              group_by(Year) |>
+              summarise(Total_nombre_feux = sum(Nombre, na.rm = TRUE), .groups = "drop"),
+            by = "Year") |>
+  filter(!is.na(total_km2) & !is.na(Total_nombre_feux))
+
+# Calcul de la corrélation de Pearson
+correlation_pearson <- cor(df_correlation$total_km2, df_correlation$Total_nombre_feux, method = "pearson")
+
+# Calcul de la corrélation de Spearman
+correlation_spearman <- cor(df_correlation$total_km2, df_correlation$Total_nombre_feux, method = "spearman")
+
+cat(paste0("\n### Corrélation entre la superficie brûlée et le nombre de feux\n"))
+cat(paste0("La corrélation de Pearson entre la superficie totale brûlée et le nombre total de feux est de : ", round(correlation_pearson, 2), "\n"))
+cat(paste0("La corrélation de Spearman entre la superficie totale brûlée et le nombre total de feux est de : ", round(correlation_spearman, 2), "\n"))
+
+# Visualisation de la corrélation
+p_corr <- ggplot(df_correlation, aes(x = Total_nombre_feux, y = total_km2)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(title = "Corrélation entre le nombre de feux et la superficie brûlée",
+       x = "Nombre total de feux",
+       y = "Superficie totale brûlée (km²)") +
+  theme_pub
+
+ggsave("fig_correlation_feux_superficie.png", p_corr, width=9, height=4.8, dpi=400)
+
+print(p_corr)
 
 # Tableau du nombre de feux par cause
 tableau_nombre <- donnees_nombre_agg |>

@@ -2,6 +2,12 @@
 
 Bienvenue sur mon dépôt GitHub professionnel. Ce portfolio regroupe mes travaux académiques et projets personnels réalisés dans les domaines de la **Statistique**, de l'**Analyse de Séries Temporelles**, de la **Modélisation Stochastique** et de l'**Économétrie**.
 
+## Technologies Utilisées
+Ce portfolio met en œuvre une variété d'outils et de langages pour l'analyse de données et la modélisation statistique, incluant :
+- **R** (avec des packages tels que `tidyverse`, `ggplot2`, `forecast`, `tseries`, `sf`, `dplyr`, `readr`, `purrr`, `readxl`, `tidyr`, `scales`, `knitr`, `kableExtra`)
+- **Python** (pour des analyses spécifiques ou des scripts utilitaires, si applicable)
+- **Excel** (pour des analyses économétriques spécifiques)
+
 ## Projets de Recherche et d'Analyse
 
 ### 1. [Évaluation Critique de l'Intelligence Artificielle en Mammographie](./IA-Mammographie-Evaluation/)
@@ -14,23 +20,25 @@ Bienvenue sur mon dépôt GitHub professionnel. Ce portfolio regroupe mes travau
 *   **Compétences** : Tests de stationnarité (ADF, KPSS), lissage exponentiel, différenciation et analyse d'autocorrélation.
 *   **Outils** : R (forecast, tseries, ggplot2).
 
-### 3. [Tarification d'Options Européennes par Simulation de Monte Carlo](./Tarification-Options-Monte-Carlo/)
+### 3. [Évaluation d'Options Européennes par Simulation de Monte Carlo](./Evaluation-Options-Monte-Carlo/)
 *   **Objectif** : Implémentation et comparaison de techniques de réduction de variance pour l'évaluation d'options financières.
 *   **Compétences** : Modèle de Black-Scholes, Simulation de Monte Carlo, Variables Antithétiques, Variables de Contrôle et Échantillonnage Stratifié.
 *   **Outils** : R (stats, ggplot2, dplyr).
 
-### 4. [Travaux Pratiques en Modélisation Économétrique](./Modelisation-Econometrique-TP3/)
+### 4. [Analyse Économétrique Financière](./Analyse-Econometrique-Financiere/)
 *   **Objectif** : Analyse de données financières et application de modèles économétriques avancés.
 *   **Compétences** : Régression linéaire, tests d'hypothèses et interprétation de résultats statistiques.
 *   **Outils** : Excel, Analyse de données.
 
 ### 5. [Analyse des Dynamiques des Feux de Forêt au Canada (1990-2023)](./Analyse-Feux-Canada/)
 *   **Objectif** : Analyse statistique des superficies brûlées par les feux de forêt au Canada, visualisation des tendances annuelles et identification des causes principales.
-*   **Compétences** : Traitement de données géospatiales (shapefile), agrégation de données, visualisation (graphiques linéaires et à barres), analyse de tendances.
+*   **Compétences** : Traitement de données géospatiales (shapefile), agrégation de données, visualisation (graphiques linéaires et à barres), analyse de tendances, corrélation.
 *   **Outils** : R (sf, dplyr, readr, purrr, readxl, ggplot2, tidyr, scales, knitr, kableExtra).
 
 ---
 
-**Auteur** : Adjaratou Sarr  
-**Spécialisation** : Statistique & Analyse de Données  
-**Contact** : dadjaratousarr854@gmail.com
+## Contact
+Je suis ouvert aux opportunités de collaboration et aux discussions sur des projets d'analyse de données. N'hésitez pas à me contacter :
+*   **Auteur** : Adjaratou Sarr
+*   **Spécialisation** : Statistique & Analyse de Données
+*   **Email** : dadjaratousarr854@gmail.com
