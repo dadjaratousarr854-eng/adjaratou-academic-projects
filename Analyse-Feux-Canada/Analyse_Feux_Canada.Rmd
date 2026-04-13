@@ -6,12 +6,12 @@ output: pdf_document
 ---
 # Code des tableaux, et des graphiques ainsi que des analyses statistiques.
 J'ai utilisée la plage horaire 1990-2023 pour concorder avec les années utilisées par nos journalistes.
+
 ```{r}
 
 # --- Packages ---
-library(sf); library(dplyr); library(readr); library(purrr)
-library(readxl); library(ggplot2); library(tidyr); library(scales)
-library(knitr); library(kableExtra)
+library(dplyr); library(ggplot2); library(tidyr); library(scales)
+library(knitr); library(kableExtra); library(readr)
 
 # --- Paramètres ---
 ANNEE_DEBUT <- 1990
@@ -31,40 +31,46 @@ theme_pub <- theme_minimal(base_size = 13) +
         plot.background = element_rect(fill="#F8F8F8", color=NA))
 
 
-# 1) EXTRAIRE TOTAUX ANNUELS DEPUIS LE SHAPEFILE MULTI-ANNÉES
+# 1) LECTURE DES DONNÉES DEPUIS LES FICHIERS CSV
 
-shapefile_path <- "/Users/adjaratousarr/Downloads/NBAC_1972to2024_20250506_shp/NBAC_1972to2024_20250506.shp"
-nbac_sf <- st_read(shapefile_path, quiet = TRUE)
+# Fichier des superficies brûlées (en hectares)
+path_superficies <- "Superficies En Hectares.csv"
+df_superficies <- read.csv(path_superficies, sep = "\t", check.names = FALSE)
 
-col_surface <- intersect(c("ADJ_HA","POLY_HA","AREA_HA","Shape_Area"), names(nbac_sf))[1]
-
-
-df_total <- nbac_sf |>
-  st_drop_geometry() |>
-  transmute(year = as.numeric(.data$YEAR),
-            total_brule_ha = as.numeric(.data[[col_surface]])) |>
-  filter(!is.na(year)) |>
-  group_by(year) |>
-  summarise(total_brule_ha = sum(total_brule_ha, na.rm = TRUE), .groups = "drop") |>
-  arrange(year)
-
-# Sauvegarder le CSV dans le dossier de travail 
-csv_total_path <- file.path(getwd(), "NBAC_totaux_annuels_1972_2024.csv")
-write_csv(df_total, csv_total_path)
-
-cat("Créé :", csv_total_path, "\n")
-
-# Filtre 1990–2023 + conversion km² pour les graphes
-df_total_9023 <- df_total |>
-  filter(year >= ANNEE_DEBUT, year <= ANNEE_FIN) |>
-  mutate(total_km2 = total_brule_ha / 100)
+# Fichier du nombre de feux
+path_nombre <- "Nombre De Feux.csv"
+df_nombre <- read.csv(path_nombre, sep = "\t", check.names = FALSE)
 
 
-# 2) FIGURE A — SUPERFICIE TOTALE (1990–2023)
+# 2) NETTOYAGE ET TRANSFORMATION DES DONNÉES SUPERFICIES
 
-mod <- lm(total_km2 ~ year, data = df_total_9023)
+df_superficies_propre <- df_superficies |>
+  filter(!Cause %in% c("Annual Total", "Year")) |>
+  select(-any_of("Data Qualifier")) |>
+  pivot_longer(cols = all_of(annees_voulues),
+               names_to = "Year", values_to = "Value_ha") |>
+  mutate(Year = as.numeric(Year),
+         Value_km2 = as.numeric(gsub(",", "", Value_ha)) / 100,
+         Cause_Group = case_when(
+           Cause == "Human activity" ~ "Activité Humaine",
+           Cause == "Lightning"      ~ "Foudre",
+           Cause %in% c("Natural cause","Prescribed burn","Unspecified","Reburn") ~ "Autres Causes",
+           TRUE ~ "Autres Causes"
+         )) |>
+  filter(Year >= ANNEE_DEBUT, Year <= ANNEE_FIN, !is.na(Value_km2))
 
-pA <- ggplot(df_total_9023, aes(year, total_km2)) +
+# Agrégation par année pour la superficie totale
+df_total_9023 <- df_superficies_propre |>
+  group_by(Year) |>
+  summarise(total_km2 = sum(Value_km2, na.rm = TRUE), .groups = "drop") |>
+  arrange(Year)
+
+
+# 3) FIGURE A — SUPERFICIE TOTALE (1990–2023)
+
+mod <- lm(total_km2 ~ Year, data = df_total_9023)
+
+pA <- ggplot(df_total_9023, aes(Year, total_km2)) +
   geom_line(aes(color = "Observé"), linewidth = 1.2) +
   geom_point(aes(color = "Observé"), size = 2) +
   geom_smooth(aes(color = "Tendance linéaire"),
@@ -72,7 +78,7 @@ pA <- ggplot(df_total_9023, aes(year, total_km2)) +
   scale_color_manual(values = c("Observé"="#77AADD", "Tendance linéaire"="red"), name=NULL) +
   scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
   labs(title = "Superficie totale brûlée au Canada (1990–2023)",
-       subtitle = paste0("NBAC. Tendance linéaire : ", round(coef(mod)[2], 2), " km²/an"),
+       subtitle = paste0("Tendance linéaire : ", round(coef(mod)[2], 2), " km²/an"),
        x = "Année", y = "Superficie brûlée (km²)") +
   theme_pub
 
@@ -81,35 +87,10 @@ ggsave("fig_total_annuel_1990_2023.png", pA, width=9, height=4.8, dpi=400)
 print(pA)
 
 
-# 3) FIGURE B — SUPERFICIE PAR CAUSE (1990–2023) + TABLEAU POURCENTAGES
+# 4) FIGURE B — SUPERFICIE PAR CAUSE (1990–2023) + TABLEAU POURCENTAGES
 
-# Fichier Excel (c'est le tableau NBAC par cause & juridiction)
-path_xlsx <- "/Users/adjaratousarr/Downloads/Data.xlsx"
-
-donnees_causes <- read_excel(path_xlsx, skip = 2, col_names = FALSE)
-colnames(donnees_causes) <- c("jurisdiction","cause","qualification","`1990`:`2023`" = annees_voulues)
-
-
-donnees_causes <- donnees_causes |>
-  tidyr::fill(jurisdiction, cause) |>
-  dplyr::filter(!jurisdiction %in% c("Canada","Total","All Agencies"))
-
-# Long format + regroupement des causes
-donnees_causes_long <- donnees_causes |>
-  pivot_longer(cols = all_of(annees_voulues),
-               names_to = "Year", values_to = "Value_ha") |>
-  mutate(Year = as.numeric(Year),
-         Value_km2 = as.numeric(Value_ha)/100,
-         Cause_Group = case_when(
-           cause == "Human activity" ~ "Activité Humaine",
-           cause == "Lightning"      ~ "Foudre",
-           cause %in% c("Natural cause","Prescribed burn","Unspecified","Reburn") ~ "Autres Causes",
-           TRUE ~ "Autres Causes"
-         )) |>
-  filter(Year >= ANNEE_DEBUT, Year <= ANNEE_FIN, qualification != "e")
-
-# Agrégation année × cause
-donnees_causes_agg <- donnees_causes_long |>
+# Agrégation année × cause pour les superficies
+donnees_causes_agg <- df_superficies_propre |>
   group_by(Year, Cause_Group) |>
   summarise(Total_km2 = sum(Value_km2, na.rm = TRUE), .groups = "drop")
 
@@ -119,7 +100,7 @@ pB <- ggplot(donnees_causes_agg, aes(Year, Total_km2, fill = Cause_Group)) +
   scale_fill_manual(values = couleurs_causes) +
   scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
   labs(title = "Superficie brûlée par groupe de cause (1990–2023)",
-       subtitle = "NBAC – Somme de toutes les juridictions | unités : km²",
+       subtitle = "Unités : km²",
        x = "Année", y = "Superficie brûlée (km²)", fill = "Cause") +
   theme_pub
 
@@ -144,4 +125,55 @@ kable(tableau_cause,
   row_spec(0, bold = TRUE)
 
 
-```
+# 5) FIGURE C — NOMBRE DE FEUX PAR CAUSE (1990–2023)
+
+# Nettoyage des données du nombre de feux
+df_nombre_propre <- df_nombre |>
+  filter(!Cause %in% c("Annual Total", "Year")) |>
+  select(-any_of("Data Qualifier")) |>
+  pivot_longer(cols = all_of(annees_voulues),
+               names_to = "Year", values_to = "Nombre") |>
+  mutate(Year = as.numeric(Year),
+         Nombre = as.numeric(gsub(",", "", Nombre)),
+         Cause_Group = case_when(
+           Cause == "Human activity" ~ "Activité Humaine",
+           Cause == "Lightning"      ~ "Foudre",
+           Cause %in% c("Natural cause","Prescribed burn","Unspecified","Reburn") ~ "Autres Causes",
+           TRUE ~ "Autres Causes"
+         )) |>
+  filter(Year >= ANNEE_DEBUT, Year <= ANNEE_FIN, !is.na(Nombre))
+
+# Agrégation année × cause pour le nombre de feux
+donnees_nombre_agg <- df_nombre_propre |>
+  group_by(Year, Cause_Group) |>
+  summarise(Total_nombre = sum(Nombre, na.rm = TRUE), .groups = "drop")
+
+# Graphique du nombre de feux par cause
+pC <- ggplot(donnees_nombre_agg, aes(Year, Total_nombre, fill = Cause_Group)) +
+  geom_bar(stat="identity", color="white", linewidth=0.2) +
+  scale_fill_manual(values = couleurs_causes) +
+  scale_y_continuous(labels = label_number()) +
+  labs(title = "Nombre de feux par groupe de cause (1990–2023)",
+       x = "Année", y = "Nombre de feux", fill = "Cause") +
+  theme_pub
+
+ggsave("fig_nombre_feux_par_cause_1990_2023.png", pC, width=9, height=4.8, dpi=400)
+
+print(pC)
+
+# Tableau du nombre de feux par cause
+tableau_nombre <- donnees_nombre_agg |>
+  group_by(Cause_Group) |>
+  summarise(`Nombre total de feux` = sum(Total_nombre, na.rm = TRUE), .groups="drop") |>
+  mutate(`Part du total (%)` = round(100 * `Nombre total de feux` / sum(`Nombre total de feux`), 1)) |>
+  arrange(desc(`Part du total (%)`))
+
+# Export CSV (pour Word) 
+write.csv(tableau_nombre, "table_pourcentages_nombre_1990_2023.csv", row.names = FALSE)
+
+kable(tableau_nombre,
+      caption = "Tableau 2 — Répartition du nombre de feux par cause (1990–2023)",
+      align = c("l","r","r")) |>
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped","hover")) |>
+  row_spec(0, bold = TRUE)
+
