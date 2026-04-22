@@ -92,6 +92,7 @@ calculate_efficiency <- function(variance, time_taken) {
   return(1 / (variance * time_taken))
 }
 
+# Fonction pour analyser les résultats et calculer les métriques
 analyse_results <- function(payoffs, name, theoretical_price) {
   price_estimate <- exp(-r * T) * mean(payoffs)
   var_payoff <- var(payoffs)
@@ -101,11 +102,12 @@ analyse_results <- function(payoffs, name, theoretical_price) {
   ci_lower <- exp(-r * T) * (mean(payoffs) - 1.96 * se_payoff)
   ci_upper <- exp(-r * T) * (mean(payoffs) + 1.96 * se_payoff)
   
-  # RMSE
+  # RMSE (Root Mean Square Error) par rapport au prix théorique
   rmse <- sqrt(mean((price_estimate - theoretical_price)^2))
   
   # Placeholder for time_taken, as we don't measure it in this script
-  time_taken <- 1 # Assume unit time for comparison of efficiency
+  # Assume unit time for comparison of efficiency, or 1 if not measured
+  time_taken <- 1 
   efficiency <- calculate_efficiency(var_payoff, time_taken)
   
   return(data.frame(
@@ -151,10 +153,10 @@ p_stratified <- ggplot(df_stratified_plot, aes(x=ST)) +
   labs(title="Distribution des Prix Simulés (Stratified Sampling)", x="Prix à Maturité", y="Fréquence") +
   theme_minimal()
 
-# Sauvegarde des graphiques (vous pouvez les afficher directement dans RStudio ou les sauvegarder)
-ggsave("dist_base_mc.png", plot = p_base, width = 10, height = 6, dpi = 300)
-ggsave("dist_antithetic_variates.png", plot = p_antithetic, width = 10, height = 6, dpi = 300)
-ggsave("dist_stratified_sampling.png", plot = p_stratified, width = 10, height = 6, dpi = 300)
+# Sauvegarde des graphiques dans le dossier 'output'
+ggsave("output/dist_base_mc.png", plot = p_base, width = 10, height = 6, dpi = 300)
+ggsave("output/dist_antithetic_variates.png", plot = p_antithetic, width = 10, height = 6, dpi = 300)
+ggsave("output/dist_stratified_sampling.png", plot = p_stratified, width = 10, height = 6, dpi = 300)
 
 # Pour le Control Variates, le graphique de relation entre ST et Payoff est plus pertinent
 df_control_plot <- data.frame(ST = ST_control, Payoff = payoffs_control)
@@ -164,4 +166,4 @@ p_control <- ggplot(df_control_plot, aes(x=ST, y=Payoff)) +
   labs(title="Relation entre Prix Terminal et Payoff (Control Variates)", x="Prix à Maturité", y="Payoff") +
   theme_minimal()
 
-ggsave("relation_control_variates.png", plot = p_control, width = 10, height = 6, dpi = 300)
+ggsave("output/relation_control_variates.png", plot = p_control, width = 10, height = 6, dpi = 300)

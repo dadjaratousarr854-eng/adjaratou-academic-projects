@@ -1,34 +1,47 @@
-# Évaluation d'Options Européennes par Simulation de Monte Carlo
+# Évaluation d'Options par Méthodes de Monte Carlo
 
-Ce projet est dédié à l'implémentation et à l'évaluation comparative de diverses techniques de simulation de Monte Carlo pour l'évaluation d'options européennes, dans le cadre du modèle de Black-Scholes. L'objectif principal est d'explorer et de comparer différentes méthodes de réduction de variance afin d'améliorer la précision et l'efficacité des estimations de prix.
+Ce projet explore l'évaluation d'options financières de type européen en utilisant la méthode de Monte Carlo, complétée par diverses techniques de réduction de variance. L'objectif est de démontrer l'efficacité de ces techniques pour améliorer la précision et la convergence des estimations de prix d'options, un aspect crucial en finance quantitative.
 
-## Objectifs de l'Étude
+## Objectifs du Projet
 
-L'étude vise à :
+*   **Implémentation de Monte Carlo** : Développer un simulateur de base pour l'évaluation d'options européennes.
+*   **Réduction de Variance** : Appliquer et comparer des techniques telles que les variables antithétiques, les variables de contrôle et l'échantillonnage stratifié.
+*   **Analyse Comparative** : Évaluer l'impact de chaque technique sur la variance des estimateurs, les intervalles de confiance et l'efficacité globale.
 
-*   **Implémenter le Modèle de Black-Scholes** : Mettre en œuvre le cadre théorique pour la tarification des options.
-*   **Développer des Simulations de Monte Carlo** : Appliquer des simulations pour estimer le prix des options européennes.
-*   **Évaluer les Techniques de Réduction de Variance** : Comparer l'efficacité des variables antithétiques, des variables de contrôle et de l'échantillonnage stratifié.
-*   **Analyser la Précision et l'Efficacité** : Quantifier les gains en précision et en temps de calcul apportés par chaque méthode.
+## Structure du Projet
 
-## Méthodologie
+Le projet est organisé de la manière suivante :
 
-La méthodologie comprend les étapes suivantes :
+*   `Monte_Carlo_Option_Pricing.R` : Le script R principal contenant l'implémentation des modèles de Monte Carlo et des techniques de réduction de variance.
+*   `output/` : Ce répertoire contiendra les figures générées, illustrant les distributions des prix simulés et les relations clés.
 
-1.  **Modèle de Black-Scholes** : Utilisation du modèle de Black-Scholes comme référence pour la tarification des options européennes.
-2.  **Simulation de Monte Carlo de Base** : Réalisation d'une simulation sans techniques de réduction de variance pour établir une ligne de base.
-3.  **Techniques de Réduction de Variance** :
-    *   **Variables Antithétiques** : Génération de paires de trajectoires corrélées négativement pour réduire la variance.
-    *   **Variables de Contrôle** : Utilisation d'une variable auxiliaire dont la covariance avec la variable d'intérêt est connue pour ajuster l'estimateur.
-    *   **Échantillonnage Stratifié** : Division de l'espace des paramètres en strates et échantillonnage indépendant dans chaque strate.
-4.  **Analyse Comparative** : Évaluation des résultats en termes de variance de l'estimateur et de temps de calcul.
-
-## Contenu du Répertoire
-
-*   `Rapport_Modelisation_Stochastique.pdf` : Rapport complet détaillant les fondements théoriques, la méthodologie et les résultats du projet.
-*   `Monte_Carlo_Option_Pricing.R` : Script R contenant l'implémentation du modèle de Black-Scholes, de la simulation de Monte Carlo de base et des différentes techniques de réduction de variance.
-
-## Outils Logiciels
+## Outils et Technologies
 
 *   **Langage de Programmation** : R
-*   **Bibliothèques** : `stats`, `ggplot2`, `dplyr`.
+*   **Bibliothèques R** : `ggplot2`, `dplyr`, `tidyr`, `stats`, `readxl`.
+
+## Comment Exécuter l'Analyse
+
+Pour reproduire l'analyse et générer les résultats :
+
+1.  **Cloner le dépôt** :
+    ```bash
+    git clone https://github.com/dadjaratousarr854-eng/adjaratou-academic-projects.git
+    ```
+2.  **Naviguer vers le répertoire du projet** :
+    ```bash
+    cd adjaratou-academic-projects/Evaluation-Options-Monte-Carlo
+    ```
+3.  **Installer les packages R nécessaires** (si ce n'est pas déjà fait) :
+    ```R
+    install.packages(c("ggplot2", "dplyr", "tidyr", "stats", "readxl"))
+    ```
+4.  **Exécuter le script R** :
+    ```bash
+    Rscript Monte_Carlo_Option_Pricing.R
+    ```
+    Les résultats numériques seront affichés dans la console et les graphiques seront sauvegardés dans le dossier `output/`.
+
+## Résultats Clés
+
+L'analyse démontre que les techniques de réduction de variance améliorent significativement la précision des estimations de Monte Carlo pour l'évaluation d'options. Les variables antithétiques et les variables de contrôle, en particulier, réduisent la variance des estimateurs, permettant d'obtenir des résultats plus fiables avec un nombre de simulations réduit. Ces méthodes sont essentielles pour une modélisation financière efficace et robuste.
