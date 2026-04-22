@@ -1,62 +1,79 @@
 ---
-title: "Final"
-author: "Yuanheng Bao"
-date: "2025-11-27"
-output: word_document
+title: "Évaluation de l'Impact de l'IA sur le Dépistage du Cancer du Sein"
+author: "Adjaratou Sarr"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    highlight: tango
 ---
 
-```{r}
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center", fig.width = 8, fig.height = 5)
 
-###########################################################
-# PRAIM Screening Cohort Analysis (sample version)
-# Data file: praim.csv  (from Dryad)
-# Author: your name
-###########################################################
-
-## 0. Packages --------------------------------------------------------------
-
-# install.packages(c("tidyverse", "broom")) # If needed
+# --- Chargement des bibliothèques ---
 library(tidyverse)
 library(broom)
+library(ggplot2)
+```
 
-## 1. Load data --------------------------------------------------------------
+# Introduction
 
-praim_raw <- read_csv("praim.csv")
+Cette étude évalue l'impact de l'intégration de l'intelligence artificielle (IA) dans les programmes de dépistage du cancer du sein. En analysant des données réelles, nous comparons les performances de dépistage avec et sans assistance de l'IA, en nous concentrant sur les taux de détection du cancer et les taux de rappel. L'objectif est de fournir des preuves empiriques sur l'efficacité de l'IA en mammographie.
 
-cat("Rows in full data: ", nrow(praim_raw), "\n")
+# 1. Données et Méthodologie
 
-## 2. Build main variables ---------------------------------------------------
+## 1.1. Source des Données
+
+Les données proviennent de l'étude PRAIM (Prospective multicenter observational study of an integrated AI system with live Monitoring), un ensemble de données anonymisées de 461 818 cas de dépistage dans 12 sites en Allemagne. Elles incluent des variables telles que la détection du cancer, l'utilisation de l'IA, les évaluations des radiologues et les caractéristiques du cancer.
+
+## 1.2. Préparation des Données
+
+Le jeu de données `praim.csv` est chargé et les variables clés sont construites pour l'analyse.
+
+```{r load_data}
+praim_raw <- read_csv("data/praim.csv")
 
 praim <- praim_raw %>%
   mutate(
-    # exposure: use of AI
+    # Exposition: utilisation de l'IA
     ai_used = ifelse(used_ai_viewer, 1L, 0L),
     ai_group = factor(ai_used, levels = c(0, 1),
-                      labels = c("No AI", "AI-assisted")),
+                      labels = c("Sans IA", "Avec IA")),
 
-    # outcome: cancer
+    # Résultat: cancer
     cancer = ifelse(cancer_detected, 1L, 0L),
 
-    # recall indicator
+    # Indicateur de rappel
     recall = ifelse(had_recall, 1L, 0L)
   )
 
-cat("Finished building key variables.\n")
+cat("Variables clés construites. Nombre total d'observations: ", nrow(praim), "\n")
+```
 
-## 3. Take a random sample for analysis --------------------------------------
+## 1.3. Échantillonnage (pour démonstration)
 
-set.seed(123)  # for reproducibility
+Pour des raisons de performance et de démonstration, un échantillon aléatoire de 5% des données est utilisé pour les analyses subséquentes.
+
+```{r sample_data}
+set.seed(123) # Pour la reproductibilité
 praim_small <- praim %>% sample_frac(0.05)
 
-cat("Rows in sampled data: ", nrow(praim_small), "\n")
+cat("Nombre d'observations dans l'échantillon: ", nrow(praim_small), "\n")
 
-## 后面所有分析都用 praim_small，而不是 praim
+# Résumé des données échantillonnées
+summary(praim_small[, c("ai_group", "cancer", "recall")])
+```
 
-cat("\n----- Summary of sampled data -----\n")
-print(summary(praim_small[, c("ai_group", "cancer", "recall")]))
+# 2. Statistiques Descriptives et Performances de Dépistage
 
-## 4. Descriptive statistics -------------------------------------------------
+## 2.1. Statistiques Descriptives par Groupe
 
+Comparaison des taux de détection du cancer et des taux de rappel entre les groupes "Sans IA" et "Avec IA".
+
+```{r descriptive_stats}
 desc_tbl <- praim_small %>%
   group_by(ai_group) %>%
   summarise(
@@ -68,11 +85,14 @@ desc_tbl <- praim_small %>%
     .groups = "drop"
   )
 
-cat("\n----- Descriptive table (Cancer & Recall by AI group, SAMPLE) -----\n")
-print(desc_tbl)
+knitr::kable(desc_tbl, digits = 3, caption = "Statistiques descriptives (Cancer et Rappel par groupe IA)")
+```
 
-## 5. Screening performance measures ----------------------------------------
+## 2.2. Mesures de Performance de Dépistage
 
+Calcul des taux de détection et de rappel pour 1000 femmes dépistées, ainsi que la valeur prédictive positive (VPP) du rappel.
+
+```{r performance_measures}
 perf <- praim_small %>%
   group_by(ai_group) %>%
   summarise(
@@ -85,37 +105,48 @@ perf <- praim_small %>%
     .groups = "drop"
   )
 
-cat("\n----- Screening performance by AI group (SAMPLE) -----\n")
-print(perf)
+knitr::kable(perf, digits = 3, caption = "Mesures de performance de dépistage par groupe IA")
+```
 
-## 6. Logistic regression ----------------------------------------------------
+# 3. Modélisation Logistique
 
-# 6.1 Crude model
+## 3.1. Modèle Brut
+
+Un modèle de régression logistique brut est ajusté pour évaluer l'association entre l'utilisation de l'IA et la détection du cancer.
+
+```{r crude_model}
 fit_crude <- glm(cancer ~ ai_group,
                  data = praim_small,
                  family = binomial())
 
-cat("\n----- Crude logistic regression (SAMPLE): cancer ~ ai_group -----\n")
-print(summary(fit_crude))
+summary(fit_crude)
 
-cat("\nOdds ratios (crude model, SAMPLE):\n")
-print(exp(cbind(OR = coef(fit_crude),
-                confint.default(fit_crude))))
+# Odds Ratios
+exp(cbind(OR = coef(fit_crude),
+          confint.default(fit_crude)))
+```
 
-# 6.2 Adjusted model (control for reader_set)
+## 3.2. Modèle Ajusté
+
+Un modèle ajusté incluant le `reader_set` est utilisé pour contrôler les facteurs de confusion potentiels.
+
+```{r adjusted_model}
 fit_adj <- glm(cancer ~ ai_group + reader_set,
                data = praim_small,
                family = binomial())
 
-cat("\n----- Adjusted logistic regression (SAMPLE): cancer ~ ai_group + reader_set -----\n")
-print(summary(fit_adj))
+summary(fit_adj)
 
-cat("\nOdds ratios (adjusted model, SAMPLE):\n")
-print(exp(cbind(OR = coef(fit_adj),
-                confint.default(fit_adj))))
+# Odds Ratios
+exp(cbind(OR = coef(fit_adj),
+          confint.default(fit_adj)))
+```
 
-## 7. Plot detection & recall rates -----------------------------------------
+# 4. Visualisation des Résultats
 
+Les taux de détection et de rappel sont visualisés pour comparer l'impact de l'IA.
+
+```{r plot_performance, echo=FALSE}
 perf_long <- perf %>%
   select(ai_group, detection_rate_per_1000, recall_rate_per_1000) %>%
   pivot_longer(
@@ -125,8 +156,8 @@ perf_long <- perf %>%
   ) %>%
   mutate(metric = recode(
     metric,
-    detection_rate_per_1000 = "Cancer detection rate (per 1000)",
-    recall_rate_per_1000    = "Recall rate (per 1000)"
+    detection_rate_per_1000 = "Taux de détection du cancer (pour 1000)",
+    recall_rate_per_1000    = "Taux de rappel (pour 1000)"
   ))
 
 p <- ggplot(perf_long, aes(x = ai_group, y = value, fill = ai_group)) +
@@ -134,25 +165,14 @@ p <- ggplot(perf_long, aes(x = ai_group, y = value, fill = ai_group)) +
   facet_wrap(~ metric, scales = "free_y") +
   labs(
     x = "",
-    y = "Rate per 1000 women",
-    title = "Screening performance by AI use (Sample)"
+    y = "Taux pour 1000 femmes",
+    title = "Performance de dépistage selon l'utilisation de l'IA"
   ) +
   theme_minimal()
 
-cat("\nPlot created from SAMPLE data. Use print(p) to view in RStudio.\n")
 print(p)
-
-## 8. Save outputs -----------------------------------------------------------
-
-write_csv(perf, "praim_performance_by_ai_group_sample.csv")
-
-capture.output(summary(fit_crude),
-               file = "model_crude_summary_sample.txt")
-capture.output(summary(fit_adj),
-               file = "model_adjusted_summary_sample.txt")
-
-cat("\nSample-based analysis completed.\n")
-
-
 ```
 
+# Conclusion
+
+Cette analyse fournit des informations précieuses sur la performance du dépistage du cancer du sein assisté par l'IA. Les résultats des modèles logistiques et les visualisations des taux de détection et de rappel permettent de mieux comprendre l'efficacité de ces systèmes dans un contexte réel. Ces découvertes sont essentielles pour l'amélioration continue des pratiques de dépistage et la prise de décision clinique.
