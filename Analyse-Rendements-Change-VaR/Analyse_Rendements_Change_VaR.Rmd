@@ -1,0 +1,623 @@
+---
+title: "Modélisation des Rendements de Change et Évaluation du Risque (VaR)"
+author: "Adjaratou Sarr"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center", fig.width = 8, fig.height = 5)
+
+# --- Chargement des bibliothèques ---
+library(quantmod)
+library(xts)
+library(zoo)
+library(mvtnorm)
+library(ellipse)
+library(ghyp)
+library(ggplot2)
+library(knitr)
+library(fields)
+library(patchwork) # Pour combiner les graphiques
+
+set.seed(4784)
+```
+
+# Introduction
+
+Ce projet explore la dynamique conjointe de trois séries de taux de change (EUR/USD, CAD/USD, GBP/USD) à l'aide d'un modèle de mélange gaussien multivarié à deux régimes. L'objectif est de capturer les périodes de marché calmes et les périodes de stress en modélisant la volatilité variable des rendements. L'analyse inclut l'estimation du modèle, la visualisation des régimes de volatilité, le calcul de la Value-at-Risk (VaR) et une comparaison avec un modèle hyperbolique généralisé (GH).
+
+Les rendements logarithmiques journaliers sont calculés à partir de données historiques sur la période 2012–2018, puis divisés en ensembles d'entraînement et de test.
+
+# 1. Préparation des Données
+
+## 1.1. Téléchargement et Calcul des Rendements
+
+Les données historiques des taux de change sont téléchargées et transformées en rendements logarithmiques journaliers.
+
+```{r data_preparation}
+symbols <- c("EURUSD=X", "CADUSD=X", "GBPUSD=X")
+invisible(
+  getSymbols(symbols, src = "yahoo",
+             from = "2012-01-01",
+             to = "2018-01-01")
+)
+
+fx_data <- merge(
+  Cl(`EURUSD=X`),
+  Cl(`CADUSD=X`),
+  Cl(`GBPUSD=X`)
+)
+colnames(fx_data) <- c("EUR", "CAD", "GBP")
+
+log_returns <- na.omit(diff(log(fx_data)))
+
+# Séparation en ensembles d'entraînement et de test (80/20)
+split_idx <- floor(0.8 * nrow(log_returns))
+data_train <- log_returns[1:(split_idx - 1), ]
+data_test <- log_returns[split_idx:nrow(log_returns), ]
+
+train_mat <- as.matrix(data_train)
+test_mat <- as.matrix(data_test)
+
+kable(head(log_returns), caption = "Premières observations des rendements logarithmiques")
+```
+
+# 2. Modèle de Mélange Gaussien Multivarié
+
+Le modèle considéré pour les rendements de change est un mélange de deux lois normales multivariées, permettant de distinguer un régime calme et un régime de stress avec une volatilité accrue.
+
+## 2.1. Fonction de Log-Vraisemblance
+
+La fonction de log-vraisemblance pour le modèle de mélange est définie pour l'estimation des paramètres.
+
+```{r log_likelihood_function}
+log_vraisemblance_melange <- function(data, pi, mu, Sigma, tau) {
+  log_d1 <- mvtnorm::dmvnorm(data, mean = mu, sigma = Sigma, log = TRUE)
+  log_d2 <- mvtnorm::dmvnorm(data, mean = mu, sigma = tau * Sigma, log = TRUE)
+  
+  log_mix <- numeric(length(log_d1))
+  for (i in seq_along(log_d1)) {
+    a <- log(pi) + log_d1[i]
+    b <- log(1 - pi) + log_d2[i]
+    m <- max(a, b)
+    log_mix[i] <- m + log(exp(a - m) + exp(b - m))
+  }
+  sum(log_mix)
+}
+```
+
+## 2.2. Algorithme EM pour l'Estimation
+
+L'algorithme Expectation-Maximization (EM) est utilisé pour estimer les paramètres du modèle de mélange gaussien.
+
+```{r EM_algorithm}
+EM_melange <- function(data, max_iter = 200, tol = 1e-6) {
+  data <- as.matrix(data)
+  n <- nrow(data)
+  d <- ncol(data)
+  
+  # Variances empiriques fixées sur la diagonale
+  diag_emp <- diag(cov(data))
+  
+  # Initialisation robuste
+  mu_init <- colMeans(data)
+  Sigma_init <- cov(data) + diag(1e-8, d)
+  inv_Sigma_init <- solve(Sigma_init)
+  
+  # Distance quadratique au centre
+  dist2 <- apply(data, 1, function(x) {
+    diff <- matrix(x - mu_init, ncol = 1)
+    as.numeric(t(diff) %*% inv_Sigma_init %*% diff)
+  })
+  
+  # Les 20% plus extrêmes = régime stress initial
+  threshold <- quantile(dist2, 0.8)
+  gamma <- ifelse(dist2 <= threshold, 0.9, 0.1)
+  
+  # Paramètres initiaux à partir de gamma
+  pi_old <- mean(gamma)
+  mu_old <- colSums(gamma * data) / sum(gamma)
+  
+  Sigma_old <- matrix(0, d, d)
+  for (t in 1:n) {
+    diff_vec <- matrix(data[t, ] - mu_old, ncol = 1)
+    Sigma_old <- Sigma_old + gamma[t] * (diff_vec %*% t(diff_vec))
+  }
+  Sigma_old <- Sigma_old / sum(gamma)
+  diag(Sigma_old) <- diag_emp
+  Sigma_old <- Sigma_old + diag(1e-8, d)
+  
+  inv_Sigma_old <- solve(Sigma_old)
+  sum_quad <- 0
+  for (t in 1:n) {
+    diff_vec <- matrix(data[t, ] - mu_old, ncol = 1)
+    quad_val <- as.numeric(t(diff_vec) %*% inv_Sigma_old %*% diff_vec)
+    sum_quad <- sum_quad + (1 - gamma[t]) * quad_val
+  }
+  tau_old <- sum_quad / (d * sum(1 - gamma))
+  tau_old <- max(tau_old, 1.20)
+  
+  ll_old <- -Inf
+  loglik_path <- numeric(max_iter)
+  
+  for (iter in 1:max_iter) {
+    # Étape E
+    log_d1 <- mvtnorm::dmvnorm(data, mean = mu_old, sigma = Sigma_old, log = TRUE)
+    log_d2 <- mvtnorm::dmvnorm(data, mean = mu_old, sigma = tau_old * Sigma_old, log = TRUE)
+    
+    gamma <- numeric(n)
+    for (t in 1:n) {
+      a <- log(pi_old) + log_d1[t]
+      b <- log(1 - pi_old) + log_d2[t]
+      m <- max(a, b)
+      log_denom <- m + log(exp(a - m) + exp(b - m))
+      gamma[t] <- exp(a - log_denom)
+    }
+    gamma <- pmax(pmin(gamma, 0.9999), 0.0001)
+    
+    # Étape M
+    pi_new <- mean(gamma)
+    sum_gamma <- sum(gamma)
+    mu_new <- colSums(gamma * data) / sum_gamma
+    
+    Sigma_new <- matrix(0, d, d)
+    for (t in 1:n) {
+      diff_vec <- matrix(data[t, ] - mu_new, ncol = 1)
+      Sigma_new <- Sigma_new + gamma[t] * (diff_vec %*% t(diff_vec))
+    }
+    Sigma_new <- Sigma_new / sum_gamma
+    
+    # Fixer la diagonale
+    diag(Sigma_new) <- diag_emp
+    Sigma_new <- Sigma_new + diag(1e-8, d)
+    
+    inv_Sigma <- solve(Sigma_new)
+    sum_quad <- 0
+    for (t in 1:n) {
+      diff_vec <- matrix(data[t, ] - mu_new, ncol = 1)
+      quad_val <- as.numeric(t(diff_vec) %*% inv_Sigma %*% diff_vec)
+      sum_quad <- sum_quad + (1 - gamma[t]) * quad_val
+    }
+    tau_new <- sum_quad / (d * sum(1 - gamma))
+    tau_new <- max(tau_new, 1.20)
+    
+    # Log-vraisemblance
+    ll_new <- log_vraisemblance_melange(data, pi_new, mu_new, Sigma_new, tau_new)
+    loglik_path[iter] <- ll_new
+    
+    if (abs(ll_new - ll_old) < tol) {
+      break
+    }
+    
+    pi_old <- pi_new
+    mu_old <- mu_new
+    Sigma_old <- Sigma_new
+    tau_old <- tau_new
+    ll_old <- ll_new
+  }
+  
+  return(list(
+    pi = pi_new,
+    mu = mu_new,
+    Sigma = Sigma_new,
+    tau = tau_new,
+    gamma = gamma,
+    log_vraisemblance = ll_new,
+    iterations = iter,
+    loglik_path = loglik_path[1:iter]
+  ))
+}
+
+# Estimation du modèle sur les données d'entraînement
+res_em <- EM_melange(train_mat)
+
+cat("Proportion estimée du régime calme (pi) :", round(res_em$pi, 4), "\n")
+cat("Facteur d'échelle du régime de stress (tau) :", round(res_em$tau, 4), "\n")
+cat("Log-vraisemblance finale :", round(res_em$log_vraisemblance, 4), "\n")
+cat("Nombre d'itérations EM :", res_em$iterations, "\n")
+
+kable(round(res_em$mu, 6),
+      col.names = "Moyenne estimée",
+      caption = "Vecteur moyen estimé")
+
+kable(round(res_em$Sigma, 6),
+      caption = "Matrice de covariance estimée")
+```
+
+## 2.3. Convergence de l'Algorithme EM
+
+Le graphique suivant illustre la convergence de l'algorithme EM, montrant l'évolution de la log-vraisemblance au fil des itérations.
+
+```{r EM_convergence_plot}
+plot(res_em$loglik_path, type = "b", pch = 19, lwd = 2,
+     main = "Convergence de l'algorithme EM",
+     xlab = "Itération",
+     ylab = "Log-vraisemblance")
+```
+
+## 2.4. Probabilité a Posteriori du Régime Calme
+
+Les probabilités a posteriori $\gamma_t$ permettent de classer chaque observation dans le régime calme ou le régime de stress.
+
+```{r gamma_plot}
+plot(res_em$gamma, type = "l", col = "darkblue", lwd = 1.5,
+     main = "Probabilité a posteriori du régime calme",
+     xlab = "Temps",
+     ylab = expression(gamma[t]))
+abline(h = 0.5, col = "red", lty = 2)
+```
+
+## 2.5. Ellipses de Concentration des Régimes
+
+Ce graphique visualise les ellipses de concentration à 95% pour les rendements EUR et CAD, distinguant les régimes calme et de stress.
+
+```{r ellipses_plot}
+eur <- as.numeric(data_train$EUR)
+cad <- as.numeric(data_train$CAD)
+
+regime_colors <- ifelse(res_em$gamma > 0.5, "royalblue", "firebrick")
+
+x_margin <- 0.25 * diff(range(eur))
+y_margin <- 0.25 * diff(range(cad))
+
+plot(eur, cad,
+     col = regime_colors,
+     pch = 19,
+     cex = 0.5,
+     main = "Ellipses de concentration à 95%",
+     xlab = "Rendements EUR",
+     ylab = "Rendements CAD",
+     xlim = c(min(eur) - x_margin, max(eur) + x_margin),
+     ylim = c(min(cad) - y_margin, max(cad) + y_margin))
+
+lines(
+  ellipse(res_em$Sigma[1:2, 1:2],
+          centre = res_em$mu[1:2],
+          level = 0.95),
+  col = "royalblue",
+  lwd = 2
+)
+
+lines(
+  ellipse(res_em$tau * res_em$Sigma[1:2, 1:2],
+          centre = res_em$mu[1:2],
+          level = 0.95),
+  col = "firebrick",
+  lwd = 2,
+  lty = 2
+)
+
+legend("topright",
+       legend = c("Régime calme", "Régime de stress"),
+       col = c("royalblue", "firebrick"),
+       lty = c(1, 2),
+       lwd = 2,
+       bty = "n")
+```
+
+# 3. Value-at-Risk (VaR) du Portefeuille Équipondéré
+
+Cette section calcule la Value-at-Risk à 1% pour un portefeuille de devises équipondéré, en tenant compte de la distribution de mélange.
+
+```{r var_calculation}
+calcul_VaR <- function(params, weights, level = 0.01) {
+  mu_p <- sum(weights * params$mu)
+  sigma2_1 <- as.numeric(t(weights) %*% params$Sigma %*% weights)
+  sigma_1 <- sqrt(sigma2_1)
+  sigma_2 <- sqrt(params$tau * sigma2_1)
+  
+  F_mix <- function(x) {
+    params$pi * pnorm(x, mean = mu_p, sd = sigma_1) +
+      (1 - params$pi) * pnorm(x, mean = mu_p, sd = sigma_2)
+  }
+  
+  root_fun <- function(x) F_mix(x) - level
+  uniroot(root_fun,
+          interval = c(mu_p - 10 * sigma_2, mu_p + 10 * sigma_2))$root
+}
+
+weights_eq <- rep(1/3, 3)
+var_1pct <- calcul_VaR(res_em, weights_eq, level = 0.01)
+
+cat("VaR à 1% du portefeuille équipondéré :", round(var_1pct, 6), "\n")
+
+mu_portefeuille <- sum(weights_eq * res_em$mu)
+sigma_portefeuille_calme <- sqrt(as.numeric(t(weights_eq) %*% res_em$Sigma %*% weights_eq))
+sigma_portefeuille_stress <- sqrt(as.numeric(t(weights_eq) %*% (res_em$tau * res_em$Sigma) %*% weights_eq))
+
+cat("Moyenne du portefeuille :", round(mu_portefeuille, 6), "\n")
+cat("Écart-type en régime calme :", round(sigma_portefeuille_calme, 6), "\n")
+cat("Écart-type en régime de stress :", round(sigma_portefeuille_stress, 6), "\n")
+```
+
+# 4. Comparaison avec le Modèle Hyperbolique Généralisé (GH)
+
+Pour évaluer la robustesse du modèle de mélange gaussien, une comparaison est effectuée avec un modèle hyperbolique généralisé (GH), connu pour sa flexibilité à capturer les queues épaisses et l'asymétrie des rendements financiers.
+
+## 4.1. Ajustement et Log-Vraisemblance
+
+```{r gh_comparison}
+fit_GH <- fit.ghypmv(data_train, silent = TRUE)
+logLik_GH_train <- logLik(fit_GH)
+logLik_GH_test <- sum(dghyp(data_test, fit_GH, logvalue = TRUE))
+
+logLik_mix_test <- log_vraisemblance_melange(
+  as.matrix(data_test),
+  res_em$pi,
+  res_em$mu,
+  res_em$Sigma,
+  res_em$tau
+)
+
+cat("Log-vraisemblance d'entraînement (GH) :", round(logLik_GH_train, 4), "\n")
+cat("Log-vraisemblance hors-échantillon (mélange gaussien) :", round(logLik_mix_test, 4), "\n")
+cat("Log-vraisemblance hors-échantillon (GH) :", round(logLik_GH_test, 4), "\n")
+```
+
+## 4.2. Densité Marginale EUR : Mélange vs GH
+
+Une comparaison visuelle des densités marginales ajustées pour les rendements EUR est présentée, confrontant le modèle de mélange gaussien au modèle GH.
+
+```{r marginal_density_plot}
+eur_train <- as.numeric(data_train$EUR)
+x_seq <- seq(min(eur_train), max(eur_train), length.out = 300)
+
+dens_mix <- res_em$pi * dnorm(
+  x_seq,
+  mean = res_em$mu[1],
+  sd = sqrt(res_em$Sigma[1, 1])
+) + (1 - res_em$pi) * dnorm(
+  x_seq,
+  mean = res_em$mu[1],
+  sd = sqrt(res_em$tau * res_em$Sigma[1, 1])
+)
+
+fit_GH_eur <- fit.ghypuv(eur_train, silent = TRUE)
+dens_GH <- dghyp(x_seq, fit_GH_eur)
+
+hist(eur_train,
+     breaks = 50,
+     freq = FALSE,
+     col = "gray90",
+     border = "white",
+     main = "Comparaison des densités ajustées (EUR)",
+     xlab = "Rendements EUR")
+lines(x_seq, dens_mix, col = "royalblue", lwd = 2)
+lines(x_seq, dens_GH, col = "firebrick", lwd = 2, lty = 2)
+legend("topright",
+       legend = c("Mélange gaussien", "Modèle GH"),
+       col = c("royalblue", "firebrick"),
+       lty = c(1, 2),
+       lwd = 2,
+       bty = "n")
+```
+
+# 5. Modélisation du Risque avec le CAPM
+
+Cette section applique le modèle d'évaluation des actifs financiers (CAPM) pour analyser le risque et le rendement d'un portefeuille d'actions.
+
+## 5.1. Téléchargement et Préparation des Données
+
+Les données de prix pour un ensemble d'actions du S&P 500 et l'indice de marché sont téléchargées et converties en rendements logarithmiques.
+
+```{r capm_data_preparation}
+tickers <- c(
+  "AAPL", "MSFT", "AMZN", "GOOGL", "META",
+  "NVDA", "JPM", "V", "JNJ", "PG",
+  "XOM", "HD", "CVX", "MA", "PFE",
+  "KO", "PEP", "MRK", "ABBV", "BAC"
+)
+market <- "^GSPC"
+all_symbols <- c(tickers, market)
+invisible(
+  getSymbols(all_symbols, src = "yahoo",
+             from = "2018-01-01",
+             to = "2024-12-31")
+)
+
+prices_assets <- do.call(merge, lapply(tickers, function(s) Ad(get(s))))
+colnames(prices_assets) <- tickers
+prices_market <- Ad(get("GSPC"))
+colnames(prices_market) <- "SP500"
+
+prices <- merge(prices_assets, prices_market)
+prices <- na.omit(prices)
+
+returns <- na.omit(diff(log(prices)))
+returns_assets <- returns[, tickers]
+returns_market <- returns[, "SP500"]
+
+rf <- 0.02 / 252 # Taux sans risque journalier
+
+kable(head(returns[, 1:6]), caption = "Aperçu des rendements journaliers")
+```
+
+## 5.2. Moyennes et Covariances Empiriques
+
+Les rendements moyens et la matrice de covariance empirique sont calculés pour les actifs du portefeuille.
+
+```{r empirical_moments}
+mu_hat <- colMeans(returns_assets)
+Sigma_hat <- cov(returns_assets)
+
+kable(round(mu_hat, 6), col.names = "Rendement moyen", caption = "Moyennes empiriques des rendements")
+kable(round(Sigma_hat[1:6, 1:6], 6), caption = "Sous-matrice de covariance empirique (6 premiers titres)")
+```
+
+## 5.3. Portefeuille Tangent de Markowitz
+
+Le portefeuille tangent est optimisé selon le modèle de Markowitz, sans contraintes de ventes à découvert.
+
+```{r markowitz_tangent_portfolio}
+one_vec <- rep(1, length(mu_hat))
+excess_mu <- mu_hat - rf * one_vec
+w_tangent_unnormalized <- solve(Sigma_hat) %*% excess_mu
+w_tangent <- as.vector(w_tangent_unnormalized / sum(w_tangent_unnormalized))
+names(w_tangent) <- tickers
+
+mu_tangent <- sum(w_tangent * mu_hat)
+sd_tangent <- sqrt(as.numeric(t(w_tangent) %*% Sigma_hat %*% w_tangent))
+sharpe_tangent <- (mu_tangent - rf) / sd_tangent
+
+cat("Rendement moyen du portefeuille tangent :", round(mu_tangent, 6), "\n")
+cat("Écart-type du portefeuille tangent :", round(sd_tangent, 6), "\n")
+cat("Ratio de Sharpe du portefeuille tangent :", round(sharpe_tangent, 6), "\n")
+
+kable(round(sort(w_tangent, decreasing = TRUE), 4),
+      col.names = "Poids",
+      caption = "Poids du portefeuille tangent de Markowitz")
+```
+
+## 5.4. Frontière Efficiente
+
+La frontière efficiente de Markowitz est tracée, illustrant l'ensemble des portefeuilles optimaux en termes de risque-rendement.
+
+```{r efficient_frontier}
+A <- as.numeric(t(one_vec) %*% solve(Sigma_hat) %*% one_vec)
+B <- as.numeric(t(one_vec) %*% solve(Sigma_hat) %*% mu_hat)
+C <- as.numeric(t(mu_hat) %*% solve(Sigma_hat) %*% mu_hat)
+
+target_returns <- seq(min(mu_hat), max(mu_hat) * 1.5, length.out = 100)
+target_sds <- sapply(target_returns, function(m) {
+  sqrt((A * m^2 - 2 * B * m + C) / (A * C - B^2))
+})
+
+plot(target_sds, target_returns, type = "l", lwd = 2,
+     main = "Frontière efficiente et portefeuille tangent",
+     xlab = expression(sigma[p]),
+     ylab = expression(mu[p]))
+points(sd_tangent, mu_tangent, pch = 19, cex = 1.2)
+text(sd_tangent, mu_tangent, labels = " Portefeuille tangent", pos = 4)
+abline(a = rf, b = sharpe_tangent, col = "red", lty = 2, lwd = 2)
+```
+
+## 5.5. Estimation des Bêtas et Droite de Marché
+
+Les bêtas de chaque actif sont estimés par régression linéaire, et la droite de marché est visualisée.
+
+```{r capm_betas_sml}
+beta_hat <- numeric(length(tickers))
+sigma_eps <- numeric(length(tickers))
+r_m <- as.numeric(returns_market)
+
+for (i in 1:length(tickers)) {
+  r_i <- as.numeric(returns_assets[, i])
+  model <- lm(r_i ~ r_m + 0) # Régression sans intercept
+  beta_hat[i] <- coef(model)
+  sigma_eps[i] <- sd(residuals(model))
+}
+names(beta_hat) <- tickers
+
+# Configuration pour 20 graphiques (5x4)
+par(mfrow = c(5, 4), mar = c(2, 2, 3, 1), oma = c(3, 3, 1, 1))
+
+# Boucle sur chaque action pour tracer la droite de marché
+for (i in 1:length(tickers)) {
+  r_i <- as.numeric(returns_assets[, tickers[i]])
+  r_m <- as.numeric(returns_market)
+  
+  plot(r_m, r_i,
+       pch = 16, cex = 0.4, col = "gray40",
+       xlab = "", ylab = "",
+       main = tickers[i])
+  abline(0, beta_hat[i], col = "royalblue", lwd = 2)
+  legend("topleft",
+         legend = paste("\u03B2 =", round(beta_hat[i], 3)),
+         bty = "n", cex = 0.8, text.col = "royalblue")
+}
+
+mtext("Rendement du marché (R_m)", side = 1, outer = TRUE, line = 1)
+mtext("Rendement de l'action (R_i)", side = 2, outer = TRUE, line = 1)
+
+par(mfrow = c(1, 1)) # Réinitialiser l'affichage
+
+# Security Market Line (SML)
+mu_assets <- colMeans(returns_assets)
+mu_market <- mean(returns_market)
+expected_capm <- rf + beta_hat * (mu_market - rf)
+
+plot(beta_hat, mu_assets,
+     pch = 19,
+     main = "Security Market Line (SML)",
+     xlab = expression(beta),
+     ylab = "Rendement moyen")
+abline(rf, (mu_market - rf), col = "red", lwd = 2)
+text(beta_hat, mu_assets,
+     labels = tickers,
+     cex = 0.6,
+     pos = 4)
+```
+
+## 5.6. Matrice de Variance-Covariance sous le CAPM
+
+La matrice de variance-covariance est construite selon les hypothèses du CAPM, en utilisant les bêtas estimés.
+
+```{r capm_covariance_matrix}
+sigma_m2 <- var(r_m)
+D_eps <- diag(sigma_eps^2)
+Sigma_CAPM <- sigma_m2 * (beta_hat %*% t(beta_hat)) + D_eps
+rownames(Sigma_CAPM) <- tickers
+colnames(Sigma_CAPM) <- tickers
+
+kable(round(Sigma_CAPM[1:6, 1:6], 6),
+      caption = "Sous-matrice de covariance sous le CAPM (6 premiers titres)")
+```
+
+## 5.7. Comparaison Visuelle des Matrices de Covariance
+
+Une comparaison visuelle entre la matrice de covariance empirique et celle dérivée du CAPM est présentée.
+
+```{r covariance_matrix_comparison}
+par(mfrow = c(1, 2))
+col_fun <- colorRampPalette(c("white", "yellow", "orange", "red"))
+
+image(1:ncol(Sigma_hat), 1:nrow(Sigma_hat),
+      Sigma_hat[nrow(Sigma_hat):1, ],
+      col = col_fun(100),
+      main = expression(hat(Sigma)~"empirique"),
+      axes = FALSE)
+
+image(1:ncol(Sigma_CAPM), 1:nrow(Sigma_CAPM),
+      Sigma_CAPM[nrow(Sigma_CAPM):1, ],
+      col = col_fun(100),
+      main = expression(Sigma[CAPM]),
+      axes = FALSE)
+
+par(mfrow = c(1, 1))
+```
+
+## 5.8. Portefeuille Tangent sous le CAPM
+
+Le portefeuille tangent est également calculé en utilisant la matrice de covariance du CAPM.
+
+```{r capm_tangent_portfolio}
+one_vec <- rep(1, length(mu_hat))
+excess_mu <- mu_hat - rf * one_vec
+w_capm_unnormalized <- solve(Sigma_CAPM) %*% excess_mu
+w_capm <- as.vector(w_capm_unnormalized / sum(w_capm_unnormalized))
+names(w_capm) <- tickers
+
+mu_capm <- sum(w_capm * mu_hat)
+sd_capm <- sqrt(as.numeric(t(w_capm) %*% Sigma_CAPM %*% w_capm))
+sharpe_capm <- (mu_capm - rf) / sd_capm
+
+cat("Rendement moyen du portefeuille tangent CAPM :", round(mu_capm, 6), "\n")
+cat("Écart-type du portefeuille tangent CAPM :", round(sd_capm, 6), "\n")
+cat("Ratio de Sharpe du portefeuille tangent CAPM :", round(sharpe_capm, 6), "\n")
+
+kable(round(sort(w_capm, decreasing = TRUE), 4),
+      col.names = "Poids CAPM",
+      caption = "Poids du portefeuille tangent sous CAPM")
+```
+
+# Conclusion
+
+Cette analyse a permis de modéliser les rendements de change à l'aide d'un modèle de mélange gaussien multivarié, révélant l'existence de régimes de volatilité distincts. La Value-at-Risk a été calculée pour un portefeuille équipondéré, soulignant l'importance de considérer les événements extrêmes. La comparaison avec le modèle hyperbolique généralisé a montré les avantages d'une modélisation flexible pour les queues épaisses des rendements.
+
+Par ailleurs, l'application du CAPM a permis d'évaluer le risque et le rendement d'un portefeuille d'actions, de visualiser la frontière efficiente et d'estimer les bêtas des actifs. La comparaison des matrices de covariance empirique et CAPM a mis en évidence les compromis entre la flexibilité et la simplification structurelle dans la modélisation des dépendances entre actifs. Ces résultats sont essentiels pour une gestion de portefeuille et une évaluation du risque plus éclairées.

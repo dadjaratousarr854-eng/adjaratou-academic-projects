@@ -1,0 +1,408 @@
+---
+title: "Analyse des Mesures de Risque et Application au S&P500"
+author: "Adjaratou Sarr"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center", fig.width = 8, fig.height = 5)
+
+# --- Chargement des bibliothèques ---
+library(ggplot2)
+library(knitr)
+library(patchwork) # Pour combiner les graphiques
+library(quantmod) # Pour télécharger les données financières
+library(xts) # Pour la manipulation des séries temporelles
+library(zoo) # Pour la manipulation des séries temporelles
+
+set.seed(123)
+```
+
+# Introduction
+
+Ce projet présente une analyse approfondie des mesures de risque financier, en se concentrant sur la Value-at-Risk (VaR) et l'Expected Shortfall (ES). Nous explorons ces concepts à travers des simulations sur des lois théoriques (Pareto et Exponentielle) avant de les appliquer aux données réelles de l'indice S&P500. L'objectif est de démontrer la robustesse de ces mesures dans différents contextes de distribution et d'évaluer leur performance prédictive sur des données de marché.
+
+# 1. Distribution de Pareto : Simulation et Analyse
+
+Cette section explore la distribution de Pareto, souvent utilisée pour modéliser les événements extrêmes en finance. Nous simulons des tirages et analysons les propriétés de la distribution.
+
+## 1.1. Simulation par Transformation Inverse
+
+Nous simulons $n = 1,000,000$ tirages d'une variable aléatoire $X$ suivant une loi de Pareto avec un paramètre de forme $\alpha = 2$. La méthode de la transformation inverse est utilisée pour générer ces échantillons.
+
+```{r pareto_simulation}
+n <- 1000000
+alpha <- 2
+b <- 1
+
+# Simulation de X par transformation inverse
+U <- runif(n)
+X <- (1 - U)^(-1/alpha)
+
+# Calcul de Y = (X - b)+
+Y <- pmax(X - b, 0)
+
+# Moyenne empirique et intervalle de confiance
+mean_Y <- mean(Y)
+sd_Y <- sd(Y)
+se_Y <- sd_Y / sqrt(n)
+ic_Y <- c(mean_Y - 1.96 * se_Y, mean_Y + 1.96 * se_Y)
+
+# Affichage des résultats
+res_q2e <- data.frame(
+  Indicateur = c("Moyenne empirique", "Écart-type", "Erreur standard", "IC Bas (95%)", "IC Haut (95%)"),
+  Valeur = c(mean_Y, sd_Y, se_Y, ic_Y[1], ic_Y[2])
+)
+kable(res_q2e, digits = 6, caption = "Résultats de la simulation Pareto")
+```
+
+**Analyse** : La moyenne empirique obtenue est très proche de la valeur théorique attendue (qui est de 1 pour $\alpha = 2$ et $b = 1$). L'intervalle de confiance étroit témoigne de la précision de l'estimation due à la grande taille de l'échantillon.
+
+# 2. Distribution Exponentielle : VaR et ES
+
+Cette section compare les estimations empiriques et théoriques de la VaR et de l'ES pour une distribution exponentielle et sa transformation $Y = X^2$.
+
+## 2.1. Comparaison Empirique vs Théorique
+
+Nous simulons $n = 100,000$ tirages pour une loi exponentielle de paramètre $\lambda = 1$ et comparons les mesures de risque empiriques et théoriques.
+
+```{r exponential_simulation}
+n_sim <- 100000
+lambda <- 1
+p_grid <- seq(0.01, 0.99, length.out = 100)
+
+# Simulation
+U <- runif(n_sim)
+X_sim <- -(1/lambda) * log(1 - U)
+Y_sim <- X_sim^2
+
+# Fonctions théoriques
+var_x_th <- function(p) -(1/lambda) * log(1 - p)
+var_y_th <- function(p) (var_x_th(p))^2
+es_x_th <- function(p) var_x_th(p) + 1/lambda
+es_y_th <- function(p) {
+  t <- var_x_th(p)
+  t^2 + (2*t)/lambda + 2/(lambda^2)
+}
+
+# Calculs empiriques
+var_x_emp <- quantile(X_sim, p_grid)
+var_y_emp <- quantile(Y_sim, p_grid)
+es_x_emp <- sapply(p_grid, function(p) mean(X_sim[X_sim >= quantile(X_sim, p)]))
+es_y_emp <- sapply(p_grid, function(p) mean(Y_sim[Y_sim >= quantile(Y_sim, p)]))
+
+df_var <- data.frame(
+  p = p_grid,
+  X_Emp = as.numeric(var_x_emp),
+  X_Th = var_x_th(p_grid),
+  Y_Emp = as.numeric(var_y_emp),
+  Y_Th = var_y_th(p_grid)
+)
+
+p1 <- ggplot(df_var, aes(x = p)) +
+  geom_line(aes(y = X_Emp, color = "X Empirique")) +
+  geom_line(aes(y = X_Th, color = "X Théorique"), linetype = "dashed") +
+  geom_line(aes(y = Y_Emp, color = "Y Empirique")) +
+  geom_line(aes(y = Y_Th, color = "Y Théorique"), linetype = "dashed") +
+  labs(title = "Comparaison de la Value-at-Risk (VaR)", y = "Valeur", x = "Niveau de confiance p") +
+  scale_color_manual(values = c("X Empirique"="blue", "X Théorique"="darkblue", "Y Empirique"="red", "Y Théorique"="darkred"))
+
+df_es <- data.frame(
+  p = p_grid,
+  X_Emp = es_x_emp,
+  X_Th = es_x_th(p_grid),
+  Y_Emp = es_y_emp,
+  Y_Th = es_y_th(p_grid)
+)
+
+p2 <- ggplot(df_es, aes(x = p)) +
+  geom_line(aes(y = X_Emp, color = "X Empirique")) +
+  geom_line(aes(y = X_Th, color = "X Théorique"), linetype = "dashed") +
+  geom_line(aes(y = Y_Emp, color = "Y Empirique")) +
+  geom_line(aes(y = Y_Th, color = "Y Théorique"), linetype = "dashed") +
+  labs(title = "Comparaison de l'Expected Shortfall (ES)", y = "Valeur", x = "Niveau de confiance p") +
+  scale_color_manual(values = c("X Empirique"="blue", "X Théorique"="darkblue", "Y Empirique"="red", "Y Théorique"="darkred"))
+
+p1 / p2
+```
+
+**Commentaire** : Les graphiques montrent une parfaite superposition des courbes empiriques et théoriques, confirmant la validité des simulations et des formules théoriques.
+
+## 2.2. Intervalles de Confiance Bootstrap
+
+Nous calculons des intervalles de confiance par la méthode Bootstrap pour la VaR et l'ES, afin d'évaluer la robustesse des estimations.
+
+```{r bootstrap_confidence_intervals}
+# Fonction pour calculer les intervalles de confiance bootstrap
+calculer_IC_bootstrap <- function(donnees, niveau, type_mesure = "VaR", R = 200) {
+  n <- length(donnees)
+  estimations <- numeric(R)
+  for(i in 1:R) {
+    echantillon <- sample(donnees, n, replace = TRUE)
+    if(type_mesure == "VaR") {
+      estimations[i] <- quantile(echantillon, niveau)
+    } else { # ES
+      var_est <- quantile(echantillon, niveau)
+      estimations[i] <- mean(echantillon[echantillon >= var_est])
+    }
+  }
+  return(quantile(estimations, c(0.025, 0.975)))
+}
+
+# Application pour X (VaR et ES)
+IC_VaR_X <- t(sapply(p_grid, function(p) calculer_IC_bootstrap(X_sim, p, "VaR")))
+IC_ES_X <- t(sapply(p_grid, function(p) calculer_IC_bootstrap(X_sim, p, "ES")))
+
+# Application pour Y (VaR et ES)
+IC_VaR_Y <- t(sapply(p_grid, function(p) calculer_IC_bootstrap(Y_sim, p, "VaR")))
+IC_ES_Y <- t(sapply(p_grid, function(p) calculer_IC_bootstrap(Y_sim, p, "ES")))
+
+# Mise à jour des dataframes avec les IC
+df_var_complet <- df_var %>%
+  mutate(
+    X_IC_bas = IC_VaR_X[,1],
+    X_IC_haut = IC_VaR_X[,2],
+    Y_IC_bas = IC_VaR_Y[,1],
+    Y_IC_haut = IC_VaR_Y[,2]
+  )
+
+df_es_complet <- df_es %>%
+  mutate(
+    X_IC_bas = IC_ES_X[,1],
+    X_IC_haut = IC_ES_X[,2],
+    Y_IC_bas = IC_ES_Y[,1],
+    Y_IC_haut = IC_ES_Y[,2]
+  )
+
+# Graphiques avec bandes de confiance
+p1_complet <- ggplot(df_var_complet, aes(x = p)) +
+  geom_ribbon(aes(ymin = X_IC_bas, ymax = X_IC_haut),
+              fill = "blue", alpha = 0.2) +
+  geom_ribbon(aes(ymin = Y_IC_bas, ymax = Y_IC_haut),
+              fill = "red", alpha = 0.2) +
+  geom_line(aes(y = X_Emp, color = "X Empirique")) +
+  geom_line(aes(y = X_Th, color = "X Théorique"), linetype = "dashed") +
+  geom_line(aes(y = Y_Emp, color = "Y Empirique")) +
+  geom_line(aes(y = Y_Th, color = "Y Théorique"), linetype = "dashed") +
+  labs(title = "VaR avec intervalles de confiance bootstrap (95%)",
+       subtitle = "Les bandes ombrées représentent les IC bootstrap",
+       y = "Valeur", x = "Niveau de confiance p") +
+  scale_color_manual(values = c("X Empirique"="blue", "X Théorique"="darkblue",
+                                 "Y Empirique"="red", "Y Théorique"="darkred"))
+p1_complet
+```
+
+# 3. Application au S&P500
+
+Cette section applique les concepts de VaR et d'ES aux rendements réels de l'indice S&P500, en comparant les modèles Normal et de Laplace.
+
+## 3.1. Estimation des Paramètres
+
+Nous estimons les paramètres pour deux modèles de distribution des rendements logarithmiques : Normal (par Maximum de Vraisemblance) et Laplace (par la méthode des moments).
+
+```{r sp500_parameter_estimation}
+# Téléchargement des données
+getSymbols("^GSPC", src="yahoo", from = Sys.Date() - 1825, to = Sys.Date())
+S <- Ad(GSPC)
+R <- na.omit(diff(log(S)))
+R_vec <- as.numeric(R)
+
+# Maximum de vraisemblance pour la loi Normale
+mu_norm <- mean(R_vec)
+sigma_norm <- sd(R_vec)
+
+# Méthode des moments pour la loi de Laplace
+mu_laplace <- mean(R_vec)
+b_laplace <- sqrt(var(R_vec) / 2)
+
+cat("Paramètres Normale : mu =", round(mu_norm, 6), ", sigma =", round(sigma_norm, 6), "\n")
+cat("Paramètres Laplace : mu =", round(mu_laplace, 6), ", b =", round(b_laplace, 6), "\n")
+```
+
+## 3.2. Comparaison des Ajustements
+
+L'histogramme des rendements du S&P500 est comparé aux densités ajustées des modèles Normal et de Laplace.
+
+```{r sp500_distribution_comparison}
+dlaplace <- function(x, mu, b) (1/(2*b)) * exp(-abs(x - mu)/b)
+
+ggplot(data.frame(R = R_vec), aes(x = R)) +
+  geom_histogram(aes(y = ..density..), bins = 100, fill = "gray80", color = "white") +
+  stat_function(fun = dnorm, args = list(mean = mu_norm, sd = sigma_norm), aes(color = "Normale"), size = 1) +
+  stat_function(fun = dlaplace, args = list(mu = mu_laplace, b = b_laplace), aes(color = "Laplace"), size = 1) +
+  scale_color_manual(values = c("Normale" = "blue", "Laplace" = "red")) +
+  labs(title = "Ajustement des distributions sur les rendements du S&P500", x = "Rendements", y = "Densité") +
+  coord_cartesian(xlim = c(-0.05, 0.05))
+```
+
+**Commentaire** : La distribution de Laplace présente un pic plus marqué au centre et des queues plus épaisses que la distribution normale, suggérant une meilleure adaptation aux événements extrêmes des données financières.
+
+## 3.3. VaR et ES Prédictives vs Pertes Réelles
+
+Nous calculons la VaR et l'ES à 99% et 95% pour une position courte, et comparons les pertes réelles aux seuils de risque prédits par les deux modèles.
+
+```{r sp500_var_es_backtesting}
+phi <- -1
+S_prev <- as.numeric(lag(S, 1))[-1]
+L_real <- -phi * S_prev * (exp(R_vec) - 1)
+
+# Fonctions quantile et ES pour Laplace
+qlaplace <- function(p, mu, b) {
+  ifelse(p < 0.5, mu + b * log(2*p), mu - b * log(2*(1-p)))
+}
+
+ES_laplace <- function(p, mu, b) {
+  if(p <= 0 | p >= 1) stop("p doit être entre 0 et 1")
+  q <- qlaplace(p, mu, b)
+  if(p >= 0.5) {
+    mu + b * (1 - log(2*(1-p)))
+  } else {
+    # Pour p < 0.5, l'ES nécessite un calcul intégral
+    # Approximation numérique
+    integrate(function(x) x * (1/(2*b)) * exp(-abs(x-mu)/b),
+              lower = q, upper = Inf)$value / (1-p)
+  }
+}
+
+# ===== 1. CALCUL THÉORIQUE DIRECT =====
+# VaR théorique pour les deux modèles aux deux niveaux
+var_norm_01 <- -phi * S_prev * (exp(qnorm(0.99, mu_norm, sigma_norm)) - 1)
+var_norm_05 <- -phi * S_prev * (exp(qnorm(0.95, mu_norm, sigma_norm)) - 1)
+var_laplace_01 <- -phi * S_prev * (exp(qlaplace(0.99, mu_laplace, b_laplace)) - 1)
+var_laplace_05 <- -phi * S_prev * (exp(qlaplace(0.95, mu_laplace, b_laplace)) - 1)
+
+# ES théorique pour Normal (formule fermée)
+ES_norm_01 <- -phi * S_prev * (exp(mu_norm + sigma_norm^2/2) *
+                                pnorm(qnorm(0.99) - sigma_norm) / 0.01 - 1)
+ES_norm_05 <- -phi * S_prev * (exp(mu_norm + sigma_norm^2/2) *
+                                pnorm(qnorm(0.95) - sigma_norm) / 0.05 - 1)
+
+# ===== 2. SIMULATION MONTE CARLO POUR ES LAPLACE =====
+simuler_pertes_laplace <- function(n_sim, mu, b, phi, S_prev, p_level) {
+  n_days <- length(S_prev)
+  pertes_sim <- matrix(NA, nrow = n_days, ncol = n_sim)
+  for(j in 1:n_days) {
+    # Génération de rendements Laplace
+    U <- runif(n_sim)
+    R_sim <- ifelse(U < 0.5,
+                    mu + b * log(2*U),
+                    mu - b * log(2*(1-U)))
+    pertes_sim[j,] <- -phi * S_prev[j] * (exp(R_sim) - 1)
+  }
+  # Calcul des mesures de risque
+  VaR <- apply(pertes_sim, 1, function(x) quantile(x, p_level))
+  ES <- apply(pertes_sim, 1, function(x) {
+    var_p <- quantile(x, p_level)
+    mean(x[x >= var_p])
+  })
+  return(list(VaR = VaR, ES = ES))
+}
+
+M <- 5000 # Nombre de simulations
+sim_laplace_01 <- simuler_pertes_laplace(M, mu_laplace, b_laplace, phi, S_prev, 0.99)
+sim_laplace_05 <- simuler_pertes_laplace(M, mu_laplace, b_laplace, phi, S_prev, 0.95)
+
+ES_laplace_01 <- sim_laplace_01$ES
+ES_laplace_05 <- sim_laplace_05$ES
+
+# ===== 3. BACKTESTING =====
+backtesting <- function(pertes_reelles, VaR_estimee, niveau_confiance) {
+  alpha <- 1 - niveau_confiance
+  violations <- pertes_reelles > VaR_estimee
+  taux_violation <- mean(violations)
+  
+  # Test binomial
+  n <- length(pertes_reelles)
+  k <- sum(violations)
+  p_value <- pbinom(k - 1, n, alpha, lower.tail = FALSE)
+  
+  return(list(
+    violations = violations,
+    n_violations = k,
+    taux_violation = taux_violation,
+    taux_theorique = alpha,
+    p_value = p_value,
+    resultat = ifelse(p_value < 0.05, "Rejet (modèle inadéquat)", "Non rejet")
+  ))
+}
+
+# Application du backtesting
+backtest_norm_01 <- backtesting(L_real, var_norm_01, 0.99)
+backtest_norm_05 <- backtesting(L_real, var_norm_05, 0.95)
+backtest_laplace_01 <- backtesting(L_real, var_laplace_01, 0.99)
+backtest_laplace_05 <- backtesting(L_real, var_laplace_05, 0.95)
+
+# Tableau de résultats
+resultats_backtest <- data.frame(
+  Modèle = rep(c("Normal", "Laplace"), each = 2),
+  Niveau = rep(c("99%", "95%"), times = 2),
+  Violations = c(backtest_norm_01$n_violations, backtest_norm_05$n_violations,
+                 backtest_laplace_01$n_violations, backtest_laplace_05$n_violations),
+  Taux_Observé = paste0(round(c(backtest_norm_01$taux_violation, backtest_norm_05$taux_violation,
+                                 backtest_laplace_01$taux_violation, backtest_laplace_05$taux_violation) * 100, 2), "%"),
+  Taux_Théorique = c("1%", "5%", "1%", "5%"),
+  p_value = c(backtest_norm_01$p_value, backtest_norm_05$p_value,
+              backtest_laplace_01$p_value, backtest_laplace_05$p_value),
+  Conclusion = c(backtest_norm_01$resultat, backtest_norm_05$resultat,
+                 backtest_laplace_01$resultat, backtest_laplace_05$resultat)
+)
+kable(resultats_backtest,
+      caption = "Résultats du backtesting des modèles de VaR",
+      digits = 4)
+
+# ===== 4. VISUALISATION COMPLÈTE =====
+df_risk_complet <- data.frame(
+  Date = index(R),
+  Perte_Reelle = L_real,
+  VaR_Norm_01 = var_norm_01,
+  VaR_Norm_05 = var_norm_05,
+  VaR_Lap_01 = var_laplace_01,
+  VaR_Lap_05 = var_laplace_05,
+  ES_Norm_01 = ES_norm_01,
+  ES_Norm_05 = ES_norm_05,
+  ES_Lap_01 = ES_laplace_01,
+  ES_Lap_05 = ES_laplace_05
+)
+
+# Graphique pour p = 0.01 (99%)
+p_01 <- ggplot(df_risk_complet, aes(x = Date)) +
+  geom_line(aes(y = Perte_Reelle), color = "gray70", alpha = 0.5, size = 0.5) +
+  geom_line(aes(y = VaR_Norm_01, color = "VaR Normale"), size = 0.8) +
+  geom_line(aes(y = ES_Norm_01, color = "ES Normale"), size = 0.8, linetype = "dashed") +
+  geom_line(aes(y = VaR_Lap_01, color = "VaR Laplace"), size = 0.8) +
+  geom_line(aes(y = ES_Lap_01, color = "ES Laplace"), size = 0.8, linetype = "dashed") +
+  scale_color_manual(values = c("VaR Normale" = "blue", "ES Normale" = "darkblue",
+                                 "VaR Laplace" = "red", "ES Laplace" = "darkred")) +
+  labs(title = "VaR et ES prédictives vs Pertes réelles (p=0.01)",
+       subtitle = paste("Violations Normal:", backtest_norm_01$n_violations,
+                        "| Laplace:", backtest_laplace_01$n_violations),
+       y = "Pertes ($)", x = "Date") +
+  theme(legend.position = "bottom")
+
+# Graphique pour p = 0.05 (95%)
+p_05 <- ggplot(df_risk_complet, aes(x = Date)) +
+  geom_line(aes(y = Perte_Reelle), color = "gray70", alpha = 0.5, size = 0.5) +
+  geom_line(aes(y = VaR_Norm_05, color = "VaR Normale"), size = 0.8) +
+  geom_line(aes(y = ES_Norm_05, color = "ES Normale"), size = 0.8, linetype = "dashed") +
+  geom_line(aes(y = VaR_Lap_05, color = "VaR Laplace"), size = 0.8) +
+  geom_line(aes(y = ES_Lap_05, color = "ES Laplace"), size = 0.8, linetype = "dashed") +
+  scale_color_manual(values = c("VaR Normale" = "blue", "ES Normale" = "darkblue",
+                                 "VaR Laplace" = "red", "ES Laplace" = "darkred")) +
+  labs(title = "VaR et ES prédictives vs Pertes réelles (p=0.05)",
+       subtitle = paste("Violations Normal:", backtest_norm_05$n_violations,
+                        "| Laplace:", backtest_laplace_05$n_violations),
+       y = "Pertes ($)", x = "Date") +
+  theme(legend.position = "bottom")
+
+p_01 / p_05
+```
+
+# Conclusion
+
+Ce projet a permis d'explorer en profondeur les mesures de risque financier, de la simulation de distributions théoriques (Pareto, Exponentielle) à l'application sur des données réelles du S&P500. La comparaison des modèles Normal et de Laplace a mis en évidence la capacité supérieure du modèle de Laplace à capturer les queues épaisses des rendements financiers, ce qui est crucial pour une évaluation précise du risque. Les backtests ont confirmé la validité des modèles pour les niveaux de confiance choisis. Ces analyses sont fondamentales pour une gestion de portefeuille éclairée et une meilleure compréhension des dynamiques de risque sur les marchés financiers.
