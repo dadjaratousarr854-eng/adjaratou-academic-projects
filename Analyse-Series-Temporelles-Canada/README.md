@@ -1,37 +1,47 @@
-# Analyse des Séries Temporelles Appliquée au Marché du Travail Canadien
+# Analyse des Séries Temporelles : Taux d'Emploi et de Chômage au Canada
 
-Ce projet propose une étude approfondie de l'évolution des taux d'emploi et de chômage au Canada sur la période 2020-2024. L'objectif est de fournir une analyse statistique rigoureuse des indicateurs du marché du travail canadien, en se concentrant sur la stationnarité des séries temporelles et la caractérisation de leurs processus stochastiques sous-jacents, afin de dégager des insights pertinents sur la dynamique du marché du travail.
+Ce projet propose une analyse approfondie des séries temporelles portant sur les indicateurs du marché du travail au Canada, spécifiquement le **taux d'emploi** et le **taux de chômage**, sur la période allant de janvier 2020 à décembre 2024. L'étude s'articule autour de la vérification de la stationnarité, de l'application de techniques de lissage et de la caractérisation statistique des processus sous-jacents. L'objectif est de comprendre les dynamiques post-pandémiques du marché du travail canadien et de préparer le terrain pour une modélisation prédictive.
 
-## Objectifs de l'Étude
+## Objectifs de l'Analyse
 
-L'étude vise à :
+*   **Vérification de la Stationnarité** : Appliquer des tests statistiques pour évaluer la stationnarité des séries temporelles.
+*   **Techniques de Lissage** : Utiliser des méthodes de moyenne mobile et de lissage exponentiel pour identifier les tendances sous-jacentes.
+*   **Caractérisation Statistique** : Analyser les fonctions d'autocorrélation et de corrélation partielle pour identifier la structure des séries.
 
-*   **Analyser les Tendances** : Examiner les évolutions des taux d'emploi et de chômage au Canada entre 2020 et 2024.
-*   **Évaluer la Stationnarité** : Appliquer des tests statistiques pour déterminer la stationnarité des séries temporelles.
-*   **Caractériser les Processus Stochastiques** : Identifier les modèles sous-jacents qui décrivent le comportement des séries.
+## Structure du Projet
 
-## Méthodologie
+Le projet est organisé de la manière suivante :
 
-La méthodologie adoptée comprend les étapes suivantes :
+*   `Analyse_Statistique_Series_Temporelles.Rmd` : Le script R Markdown principal qui contient l'intégralité du code source pour l'analyse, la génération des visualisations et la production du rapport.
+*   `data/` : Ce répertoire contient les fichiers de données brutes utilisés pour l'analyse.
+    *   `taux_chomage.csv` : Données sur le taux de chômage mensuel au Canada.
+    *   `taux_emploi.csv` : Données sur le taux d'emploi mensuel au Canada.
+*   `output/` : Ce répertoire contiendra les figures et les tableaux générés par l'exécution de l'analyse.
 
-1.  **Analyse Descriptive** : Calcul des statistiques sommaires et visualisation initiale des données pour identifier les tendances et les saisonnalités.
-2.  **Filtrage et Lissage** : Application de moyennes mobiles sur 12 mois et de lissage exponentiel simple (avec $\alpha = 0.2, 0.3$) pour dégager les composantes de tendance.
-3.  **Tests de Stationnarité** :
-    *   Différenciation d'ordre un pour stabiliser la moyenne.
-    *   Tests d'Augmented Dickey-Fuller (ADF) et de Kwiatkowski-Phillips-Schmidt-Shin (KPSS) pour confirmer la stationnarité.
-4.  **Analyse de Corrélation** : Étude des fonctions d'autocorrélation (ACF) et des tests de bruit blanc de Ljung-Box pour évaluer la dépendance temporelle.
+## Outils et Technologies
+
+*   **Langage de Programmation** : R
+*   **Bibliothèques R** : `forecast`, `tseries`, `ggplot2`, `TTR`, `dplyr`, `tidyr`, `tibble`, `zoo`, `gridExtra`.
+
+## Comment Exécuter l'Analyse
+
+Pour reproduire l'analyse et générer le rapport :
+
+1.  **Cloner le dépôt** :
+    ```bash
+    git clone https://github.com/dadjaratousarr854-eng/adjaratou-academic-projects.git
+    ```
+2.  **Naviguer vers le répertoire du projet** :
+    ```bash
+    cd adjaratou-academic-projects/Analyse-Series-Temporelles-Canada
+    ```
+3.  **Installer les packages R nécessaires** (si ce n'est pas déjà fait) :
+    ```R
+    install.packages(c("forecast", "tseries", "ggplot2", "TTR", "dplyr", "tidyr", "tibble", "zoo", "gridExtra"))
+    ```
+4.  **Ouvrir le fichier R Markdown** (`Analyse_Statistique_Series_Temporelles.Rmd`) dans RStudio.
+5.  **Générer le rapport** : Utiliser la fonction `Knit` de RStudio pour compiler le document en HTML, PDF ou Word. Les figures et tableaux seront sauvegardés dans le dossier `output/`.
 
 ## Résultats Clés
 
-L'analyse révèle que les données brutes d'emploi et de chômage présentent des tendances et une saisonnalité prononcées. Cependant, une différenciation d'ordre un permet de stationnariser efficacement ces séries, les rendant ainsi aptes à des modélisations prédictives ultérieures, telles que les modèles ARIMA. Ces résultats sont cruciaux pour la compréhension des mécanismes sous-jacents et pour l'élaboration de prévisions fiables.
-
-## Contenu du Répertoire
-
-*   `Analyse_Statistique_Series_Temporelles.Rmd` : Le fichier R Markdown principal contenant l'analyse complète, le code et les visualisations.
-*   `taux_emploi.csv` : Données mensuelles sur le taux d'emploi.
-*   `taux_chomage.csv` : Données mensuelles sur le taux de chômage.
-
-## Outils Logiciels
-
-*   **Langage de Programmation** : R
-*   **Bibliothèques** : `forecast`, `tseries`, `ggplot2`.
+Cette analyse démontre que les taux d'emploi et de chômage au Canada, bien que présentant des tendances et une saisonnalité, peuvent être stationnarisés efficacement par une différenciation d'ordre 1. Les séries transformées montrent des caractéristiques de bruit blanc, ouvrant la voie à des modélisations prédictives plus avancées, telles que les modèles ARIMA. Ces résultats fournissent une base solide pour des études économétriques ultérieures sur le marché du travail canadien.
