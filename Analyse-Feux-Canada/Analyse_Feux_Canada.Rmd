@@ -1,24 +1,33 @@
 ---
-title: "Projet R"
+title: "Analyse des Dynamiques des Feux de Forêt au Canada"
 author: "Adjaratou Sarr"
-date: "2025-10-24"
-output: pdf_document
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    highlight: tango
 ---
-# Code des tableaux, et des graphiques ainsi que des analyses statistiques.
-Ce document présente une analyse statistique approfondie des dynamiques des feux de forêt au Canada sur la période 1990-2023. L'objectif est d'identifier les tendances annuelles, de comprendre la répartition des superficies brûlées et du nombre de feux par cause, et d'explorer la corrélation entre ces deux métriques. Les données proviennent de sources officielles et couvrent la période spécifiée pour une analyse cohérente.
 
-```{r}
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center", fig.width = 8, fig.height = 5)
 
-# --- Packages ---
-library(dplyr); library(ggplot2); library(tidyr); library(scales)
-library(knitr); library(kableExtra); library(readr)
+# --- Chargement des bibliothèques ---
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(scales)
+library(knitr)
+library(kableExtra)
+library(readr)
 
-# --- Paramètres ---
+# --- Paramètres globaux ---
 ANNEE_DEBUT <- 1990
 ANNEE_FIN   <- 2023
 annees_voulues <- as.character(ANNEE_DEBUT:ANNEE_FIN)
 
-# --- Thème & couleurs ---
+# --- Thème graphique personnalisé ---
 couleurs_causes <- c("Activité Humaine"="#6BAED6", "Foudre"="#FDAE6B", "Autres Causes"="#C7E9C0")
 theme_pub <- theme_minimal(base_size = 13) +
   theme(panel.grid.minor = element_blank(),
@@ -29,10 +38,19 @@ theme_pub <- theme_minimal(base_size = 13) +
         plot.title  = element_text(face="bold", size=15),
         plot.subtitle = element_text(size=11, color="grey35"),
         plot.background = element_rect(fill="#F8F8F8", color=NA))
+```
 
+# Introduction
 
-# 1) LECTURE ET VÉRIFICATION DES DONNÉES DEPUIS LES FICHIERS CSV
+Ce document présente une analyse statistique approfondie des dynamiques des feux de forêt au Canada sur la période de `r ANNEE_DEBUT` à `r ANNEE_FIN`. L'objectif principal est d'identifier les tendances annuelles, de comprendre la répartition des superficies brûlées et du nombre de feux par cause, et d'explorer la corrélation entre ces deux métriques clés. Les données utilisées proviennent de sources officielles et couvrent la période spécifiée pour une analyse cohérente et robuste.
 
+# 1. Préparation des Données
+
+## 1.1. Lecture et Vérification des Données
+
+Les données sont lues à partir de fichiers CSV. Une fonction utilitaire est employée pour garantir une lecture sécurisée et robuste des fichiers, avec gestion des erreurs.
+
+```{r read_data}
 # Fonction pour lire un fichier CSV avec gestion d'erreurs
 read_csv_safe <- function(path, sep = ",", ...) {
   if (!file.exists(path)) {
@@ -46,33 +64,26 @@ read_csv_safe <- function(path, sep = ",", ...) {
 }
 
 # Fichier des superficies brûlées (en hectares)
-path_superficies <- "Superficies En Hectares.csv"
+path_superficies <- "data/Superficies En Hectares.csv"
 df_superficies <- read_csv_safe(path_superficies, sep = "\t", check.names = FALSE)
 
 # Fichier du nombre de feux
-path_nombre <- "Nombre De Feux.csv"
+path_nombre <- "data/Nombre De Feux.csv"
 df_nombre <- read_csv_safe(path_nombre, sep = "\t", check.names = FALSE)
 
-# Vérification rapide des données lues
+# Affichage des premières lignes pour vérification
 cat("\nDonnées de superficies lues avec succès. Premières lignes :\n")
 print(head(df_superficies))
 cat("\nDonnées du nombre de feux lues avec succès. Premières lignes :\n")
 print(head(df_nombre))
+```
 
+## 1.2. Nettoyage et Transformation des Données
 
-# 2) NETTOYAGE ET TRANSFORMATION DES DONNÉES SUPERFICIES
+Les données brutes sont nettoyées et transformées pour faciliter l'analyse. Cela inclut le filtrage des lignes non pertinentes, le renommage des colonnes, la conversion des types de données et le regroupement des causes de feux pour une meilleure agrégation.
 
-# Fichier des superficies brûlées (en hectares)
-path_superficies <- "Superficies En Hectares.csv"
-df_superficies <- read.csv(path_superficies, sep = "\t", check.names = FALSE)
-
-# Fichier du nombre de feux
-path_nombre <- "Nombre De Feux.csv"
-df_nombre <- read.csv(path_nombre, sep = "\t", check.names = FALSE)
-
-
-# 2) NETTOYAGE ET TRANSFORMATION DES DONNÉES SUPERFICIES
-
+```{r clean_transform_data}
+# Nettoyage et transformation des données de superficies
 df_superficies_propre <- df_superficies |>
   filter(!Cause %in% c("Annual Total", "Year")) |>
   select(-any_of("Data Qualifier")) |>
@@ -89,74 +100,12 @@ df_superficies_propre <- df_superficies |>
   filter(Year >= ANNEE_DEBUT, Year <= ANNEE_FIN, !is.na(Value_km2))
 
 # Agrégation par année pour la superficie totale
-df_total_9023 <- df_superficies_propre |>
+df_total_superficie_annuelle <- df_superficies_propre |>
   group_by(Year) |>
   summarise(total_km2 = sum(Value_km2, na.rm = TRUE), .groups = "drop") |>
   arrange(Year)
 
-
-# 3) FIGURE A — SUPERFICIE TOTALE (1990–2023)
-
-mod <- lm(total_km2 ~ Year, data = df_total_9023)
-
-pA <- ggplot(df_total_9023, aes(Year, total_km2)) +
-  geom_line(aes(color = "Observé"), linewidth = 1.2) +
-  geom_point(aes(color = "Observé"), size = 2) +
-  geom_smooth(aes(color = "Tendance linéaire"),
-              method = "lm", se = FALSE, linetype = "dashed") +
-  scale_color_manual(values = c("Observé"="#77AADD", "Tendance linéaire"="red"), name=NULL) +
-  scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
-  labs(title = "Superficie totale brûlée au Canada (1990–2023)",
-       subtitle = paste0("Tendance linéaire : ", round(coef(mod)[2], 2), " km²/an"),
-       x = "Année", y = "Superficie brûlée (km²)") +
-  theme_pub
-
-ggsave("fig_total_annuel_1990_2023.png", pA, width=9, height=4.8, dpi=400)
-
-print(pA)
-
-
-# 4) FIGURE B — SUPERFICIE PAR CAUSE (1990–2023) + TABLEAU POURCENTAGES
-
-# Agrégation année × cause pour les superficies
-donnees_causes_agg <- df_superficies_propre |>
-  group_by(Year, Cause_Group) |>
-  summarise(Total_km2 = sum(Value_km2, na.rm = TRUE), .groups = "drop")
-
-# Graphique par cause
-pB <- ggplot(donnees_causes_agg, aes(Year, Total_km2, fill = Cause_Group)) +
-  geom_bar(stat="identity", color="white", linewidth=0.2) +
-  scale_fill_manual(values = couleurs_causes) +
-  scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
-  labs(title = "Superficie brûlée par groupe de cause (1990–2023)",
-       subtitle = "Unités : km²",
-       x = "Année", y = "Superficie brûlée (km²)", fill = "Cause") +
-  theme_pub
-
-ggsave("fig_superficie_par_cause_1990_2023.png", pB, width=9, height=4.8, dpi=400)
-
-print(pB)
-
-# Tableau des pourcentages (1990–2023)
-tableau_cause <- donnees_causes_agg |>
-  group_by(Cause_Group) |>
-  summarise(`Superficie totale (km²)` = sum(Total_km2, na.rm = TRUE), .groups="drop") |>
-  mutate(`Part du total (%)` = round(100 * `Superficie totale (km²)` / sum(`Superficie totale (km²)`), 1)) |>
-  arrange(desc(`Part du total (%)`))
-
-# Export CSV (pour Word) 
-write.csv(tableau_cause, "table_pourcentages_cause_1990_2023.csv", row.names = FALSE)
-
-kable(tableau_cause,
-      caption = "Tableau 1 — Répartition de la superficie brûlée par cause (1990–2023)",
-      align = c("l","r","r")) |>
-  kable_styling(full_width = FALSE, bootstrap_options = c("striped","hover")) |>
-  row_spec(0, bold = TRUE)
-
-
-# 5) FIGURE C — NOMBRE DE FEUX PAR CAUSE (1990–2023)
-
-# Nettoyage des données du nombre de feux
+# Nettoyage et transformation des données du nombre de feux
 df_nombre_propre <- df_nombre |>
   filter(!Cause %in% c("Annual Total", "Year")) |>
   select(-any_of("Data Qualifier")) |>
@@ -176,27 +125,115 @@ df_nombre_propre <- df_nombre |>
 donnees_nombre_agg <- df_nombre_propre |>
   group_by(Year, Cause_Group) |>
   summarise(Total_nombre = sum(Nombre, na.rm = TRUE), .groups = "drop")
+```
 
-# Graphique du nombre de feux par cause
-pC <- ggplot(donnees_nombre_agg, aes(Year, Total_nombre, fill = Cause_Group)) +
+# 2. Analyse des Tendances Annuelles
+
+## 2.1. Superficie Totale Brûlée (1990–2023)
+
+Cette section visualise l'évolution de la superficie totale brûlée au Canada chaque année, accompagnée d'une tendance linéaire pour identifier les dynamiques à long terme.
+
+```{r plot_total_superficie}
+mod_superficie <- lm(total_km2 ~ Year, data = df_total_superficie_annuelle)
+
+p_superficie_totale <- ggplot(df_total_superficie_annuelle, aes(Year, total_km2)) +
+  geom_line(aes(color = "Observé"), linewidth = 1.2) +
+  geom_point(aes(color = "Observé"), size = 2) +
+  geom_smooth(aes(color = "Tendance linéaire"),
+              method = "lm", se = FALSE, linetype = "dashed") +
+  scale_color_manual(values = c("Observé"="#77AADD", "Tendance linéaire"="red"), name=NULL) +
+  scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
+  labs(title = "Superficie totale brûlée au Canada (`r ANNEE_DEBUT`–`r ANNEE_FIN`)",
+       subtitle = paste0("Tendance linéaire : ", round(coef(mod_superficie)[2], 2), " km²/an"),
+       x = "Année", y = "Superficie brûlée (km²)") +
+  theme_pub
+
+ggsave("output/fig_total_annuel_superficie.png", p_superficie_totale, width=9, height=4.8, dpi=400)
+
+print(p_superficie_totale)
+```
+
+## 2.2. Superficie Brûlée par Cause
+
+L'analyse de la superficie brûlée est ensuite décomposée par les principales causes de feux, offrant une perspective sur les facteurs dominants.
+
+```{r plot_superficie_cause}
+# Agrégation année × cause pour les superficies
+donnees_causes_agg <- df_superficies_propre |>
+  group_by(Year, Cause_Group) |>
+  summarise(Total_km2 = sum(Value_km2, na.rm = TRUE), .groups = "drop")
+
+p_superficie_par_cause <- ggplot(donnees_causes_agg, aes(Year, Total_km2, fill = Cause_Group)) +
+  geom_bar(stat="identity", color="white", linewidth=0.2) +
+  scale_fill_manual(values = couleurs_causes) +
+  scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
+  labs(title = "Superficie brûlée par groupe de cause (`r ANNEE_DEBUT`–`r ANNEE_FIN`)",
+       subtitle = "Unités : km²",
+       x = "Année", y = "Superficie brûlée (km²)", fill = "Cause") +
+  theme_pub
+
+ggsave("output/fig_superficie_par_cause.png", p_superficie_par_cause, width=9, height=4.8, dpi=400)
+
+print(p_superficie_par_cause)
+
+# Tableau des pourcentages de superficie par cause
+tableau_superficie_cause <- donnees_causes_agg |>
+  group_by(Cause_Group) |>
+  summarise(`Superficie totale (km²)` = sum(Total_km2, na.rm = TRUE), .groups="drop") |>
+  mutate(`Part du total (%)` = round(100 * `Superficie totale (km²)` / sum(`Superficie totale (km²)`), 1)) |>
+  arrange(desc(`Part du total (%)`))
+
+# Export CSV pour usage externe
+write.csv(tableau_superficie_cause, "output/table_pourcentages_superficie_cause.csv", row.names = FALSE)
+
+kable(tableau_superficie_cause,
+      caption = "Tableau 1 — Répartition de la superficie brûlée par cause (`r ANNEE_DEBUT`–`r ANNEE_FIN`)",
+      align = c("l","r","r")) |>
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped","hover")) |>
+  row_spec(0, bold = TRUE)
+```
+
+## 2.3. Nombre de Feux par Cause
+
+Similairement, le nombre de feux est analysé par cause pour identifier les sources prédominantes d'incendies.
+
+```{r plot_nombre_feux_cause}
+p_nombre_feux_par_cause <- ggplot(donnees_nombre_agg, aes(Year, Total_nombre, fill = Cause_Group)) +
   geom_bar(stat="identity", color="white", linewidth=0.2) +
   scale_fill_manual(values = couleurs_causes) +
   scale_y_continuous(labels = label_number()) +
-  labs(title = "Nombre de feux par groupe de cause (1990–2023)",
+  labs(title = "Nombre de feux par groupe de cause (`r ANNEE_DEBUT`–`r ANNEE_FIN`)",
        x = "Année", y = "Nombre de feux", fill = "Cause") +
   theme_pub
 
-ggsave("fig_nombre_feux_par_cause_1990_2023.png", pC, width=9, height=4.8, dpi=400)
+ggsave("output/fig_nombre_feux_par_cause.png", p_nombre_feux_par_cause, width=9, height=4.8, dpi=400)
 
-print(pC)
+print(p_nombre_feux_par_cause)
 
 # Tableau du nombre de feux par cause
+tableau_nombre_feux_cause <- donnees_nombre_agg |>
+  group_by(Cause_Group) |>
+  summarise(`Nombre total de feux` = sum(Total_nombre, na.rm = TRUE), .groups="drop") |>
+  mutate(`Part du total (%)` = round(100 * `Nombre total de feux` / sum(`Nombre total de feux`), 1)) |>
+  arrange(desc(`Part du total (%)`))
 
+# Export CSV pour usage externe
+write.csv(tableau_nombre_feux_cause, "output/table_pourcentages_nombre_feux_cause.csv", row.names = FALSE)
 
-# 6) ANALYSE DE CORRÉLATION ENTRE SUPERFICIE ET NOMBRE DE FEUX
+kable(tableau_nombre_feux_cause,
+      caption = "Tableau 2 — Répartition du nombre de feux par cause (`r ANNEE_DEBUT`–`r ANNEE_FIN`)",
+      align = c("l","r","r")) |>
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped","hover")) |>
+  row_spec(0, bold = TRUE)
+```
 
+# 3. Analyse de Corrélation
+
+Cette section explore la relation entre la superficie totale brûlée et le nombre total de feux annuels, en utilisant des mesures de corrélation de Pearson et de Spearman, ainsi qu'une visualisation graphique.
+
+```{r correlation_analysis}
 # Fusion des données de superficie et de nombre de feux par année
-df_correlation <- df_total_9023 |>
+df_correlation <- df_total_superficie_annuelle |>
   left_join(df_nombre_propre |>
               group_by(Year) |>
               summarise(Total_nombre_feux = sum(Nombre, na.rm = TRUE), .groups = "drop"),
@@ -214,7 +251,7 @@ cat(paste0("La corrélation de Pearson entre la superficie totale brûlée et le
 cat(paste0("La corrélation de Spearman entre la superficie totale brûlée et le nombre total de feux est de : ", round(correlation_spearman, 2), "\n"))
 
 # Visualisation de la corrélation
-p_corr <- ggplot(df_correlation, aes(x = Total_nombre_feux, y = total_km2)) +
+p_correlation <- ggplot(df_correlation, aes(x = Total_nombre_feux, y = total_km2)) +
   geom_point(alpha = 0.7) +
   geom_smooth(method = "lm", se = FALSE, color = "blue") +
   labs(title = "Corrélation entre le nombre de feux et la superficie brûlée",
@@ -222,23 +259,11 @@ p_corr <- ggplot(df_correlation, aes(x = Total_nombre_feux, y = total_km2)) +
        y = "Superficie totale brûlée (km²)") +
   theme_pub
 
-ggsave("fig_correlation_feux_superficie.png", p_corr, width=9, height=4.8, dpi=400)
+ggsave("output/fig_correlation_feux_superficie.png", p_correlation, width=9, height=4.8, dpi=400)
 
-print(p_corr)
-
-# Tableau du nombre de feux par cause
-tableau_nombre <- donnees_nombre_agg |>
-  group_by(Cause_Group) |>
-  summarise(`Nombre total de feux` = sum(Total_nombre, na.rm = TRUE), .groups="drop") |>
-  mutate(`Part du total (%)` = round(100 * `Nombre total de feux` / sum(`Nombre total de feux`), 1)) |>
-  arrange(desc(`Part du total (%)`))
-
-# Export CSV (pour Word) 
-write.csv(tableau_nombre, "table_pourcentages_nombre_1990_2023.csv", row.names = FALSE)
-
-kable(tableau_nombre,
-      caption = "Tableau 2 — Répartition du nombre de feux par cause (1990–2023)",
-      align = c("l","r","r")) |>
-  kable_styling(full_width = FALSE, bootstrap_options = c("striped","hover")) |>
-  row_spec(0, bold = TRUE)
+print(p_correlation)
 ```
+
+# Conclusion
+
+Cette analyse a permis de mettre en lumière les tendances et les facteurs influençant les feux de forêt au Canada. Les résultats indiquent [insérer ici une brève synthèse des conclusions les plus importantes, par exemple : une tendance à la hausse des superficies brûlées, la prédominance de certaines causes, et la force de la corrélation entre le nombre de feux et les superficies]. Ces informations sont cruciales pour les stratégies de prévention et de gestion des risques liés aux feux de forêt.
