@@ -46,4 +46,4 @@ Je suis ouvert aux opportunités de collaboration et aux discussions sur des pro
 
 *   **Auteur** : Adjaratou Sarr
 *   **Email** : dadjaratousarr854@gmail.com
-*   **LinkedIn** : [Votre profil LinkedIn](https://www.linkedin.com/in/adjaratou-sarr) (à remplacer par votre URL LinkedIn si vous en avez un)
+
